@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <link href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Anek Bangla', sans-serif; background: #f1f5f9; padding: 15px; color: #1e293b; }
+    .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    .logo-header {
+      display: flex; align-items: center; justify-content: center;
+      background: #0f1f3d; border-radius: 10px; padding: 12px 20px; margin-bottom: 18px;
+      min-height: 72px;
+    }
+    .logo-header img { height: 46px; width: auto; display: block; }
+    label { font-weight: 600; font-size: 14px; display: block; margin: 10px 0 5px; color: #334155; }
+    input, select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-family: 'Anek Bangla', sans-serif; font-size: 14px; }
+    .sub-section { margin-top: 15px; padding: 12px; border: 1px dashed #1a7fd4; border-radius: 8px; background: #f8fafc; }
+    .sub-row { display: grid; grid-template-columns: 2fr 1.5fr 1fr; gap: 8px; margin-bottom: 5px; }
+    .btn-save { width: 100%; background: #1a7fd4; color: white; padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: 700; margin-top: 20px; font-family: 'Anek Bangla', sans-serif; }
+    .btn-save:hover { background: #1565b0; }
+    small { color: #64748b; font-size: 11px; font-weight: 600; }
+    .highlight-box { background: #fffbeb; border: 1px solid #fde68a; padding: 10px; border-radius: 6px; margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo-header">
+      <img src="https://github.com/ibrahimsiddiknasib-glitch/DreamRise/blob/main/Logo_For_Dark.png?raw=true" alt="DreamRise" onerror="this.style.display='none'">
+    </div>
+
+    <!-- Exam name field -->
+    <label>পরীক্ষার নাম</label>
+    <input type="text" id="examName" placeholder="যেমন: BCS 46th Preliminary">
+
+    <!-- Positive and negative marks -->
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+      <div><label>সঠিক মার্ক (+)</label><input type="number" id="posMark" value="1" step="0.1"></div>
+      <div><label>ভুল (নেগেটিভ)</label><input type="number" id="negMark" value="0.25" step="0.01"></div>
+    </div>
+
+    <!-- Answer key row number: 1-based row index from the spreadsheet -->
+    <div class="highlight-box">
+      <label style="margin-top:0;">অ্যানসার কী রো নম্বর (Answer Key Row #)</label>
+      <input type="number" id="ansKeyRow" placeholder="উদা: 2">
+      <small>শীটের কত নম্বর সারিতে সঠিক উত্তর আছে তা লিখুন।</small>
+    </div>
+
+    <!-- Global pass percentage -->
+    <label>সামগ্রিক পাস মার্ক (Total Pass %)</label>
+    <input type="number" id="globalPass" value="40">
+
+    <!-- Toggle between standard range and subject-wise mode -->
+    <label>সাবজেক্ট ভিত্তিক কন্ডিশন আছে?</label>
+    <select id="isSub" onchange="toggleSub()">
+      <option value="false">না (পুরো রেঞ্জ একসাথে)</option>
+      <option value="true">হ্যাঁ (আলাদা আলাদা পাস মার্ক)</option>
+    </select>
+
+    <!-- Standard (single-range) mode -->
+    <div id="normalBox" style="margin-top:10px;">
+      <label>প্রশ্নের কলাম রেঞ্জ (উদা: G:DB)</label>
+      <input type="text" id="stdRange" placeholder="G:DB">
+    </div>
+
+    <!-- Subject-wise mode: dynamic subject rows -->
+    <div id="subBox" class="sub-section" style="display:none;">
+      <label>সাবজেক্ট সংখ্যা</label>
+      <select id="subCount" onchange="renderSubRows()">
+        <option value="2">২ টি</option>
+        <option value="3">৩ টি</option>
+        <option value="4">৪ টি</option>
+        <option value="5">৫ টি</option>
+        <option value="6">৬ টি</option>
+        <option value="7">৭ টি</option>
+        <option value="8">৮ টি</option>
+        <option value="9">৯ টি</option>
+        <option value="10">১০ টি</option>
+      </select>
+      <div id="subContainer" style="margin-top:10px;"></div>
+    </div>
+
+    <button class="btn-save" id="saveBtn" onclick="save()">সেভ এবং অটো-র‍্যাঙ্ক</button>
+  </div>
+
+  <script>
+    /* Toggle visibility between standard-range and subject-wise sections */
+    function toggleSub() {
+      const isSub = document.getElementById('isSub').value === 'true';
+      document.getElementById('subBox').style.display    = isSub ? 'block' : 'none';
+      document.getElementById('normalBox').style.display = isSub ? 'none'  : 'block';
+      if (isSub) renderSubRows();
+    }
+
+    /* Dynamically build subject input rows based on selected count */
+    function renderSubRows() {
+      const count     = document.getElementById('subCount').value;
+      const container = document.getElementById('subContainer');
+      container.innerHTML =
+        '<div class="sub-row"><small>নাম</small><small>রেঞ্জ</small><small>পাস নম্বর</small></div>';
+      for (let i = 0; i < count; i++) {
+        container.innerHTML += `
+          <div class="sub-row">
+            <input type="text"   class="s-name"  placeholder="বাংলা">
+            <input type="text"   class="s-range" placeholder="G:L">
+            <input type="number" class="s-pass"  value="5">
+          </div>`;
+      }
+    }
+
+    /* Collect all field values and call saveConfiguration() on the server */
+    function save() {
+      const ansRow = document.getElementById('ansKeyRow').value;
+      if (!ansRow) { alert("অ্যানসার কী রো নম্বর দিন!"); return; }
+
+      const btn = document.getElementById('saveBtn');
+      btn.innerText = "Processing...";
+      btn.disabled  = true;
+
+      const config = {
+        examName:      document.getElementById('examName').value,
+        posMark:       document.getElementById('posMark').value,
+        negMark:       document.getElementById('negMark').value,
+        globalPass:    document.getElementById('globalPass').value,
+        ansKeyRow:     ansRow,
+        isSubjectWise: document.getElementById('isSub').value === 'true',
+        standardRange: document.getElementById('stdRange').value.toUpperCase(),
+        subjects:      []
+      };
+
+      /* Collect subject rows if subject-wise mode is active */
+      if (config.isSubjectWise) {
+        const names  = document.querySelectorAll('.s-name');
+        const ranges = document.querySelectorAll('.s-range');
+        const passes = document.querySelectorAll('.s-pass');
+        names.forEach((n, i) => {
+          if (n.value) {
+            config.subjects.push({
+              name:  n.value,
+              range: ranges[i].value.toUpperCase(),
+              pass:  passes[i].value
+            });
+          }
+        });
+      }
+
+      /* Send config to Apps Script backend and close dialog on success */
+      google.script.run
+        .withSuccessHandler(() => { google.script.host.close(); })
+        .withFailureHandler((err) => {
+          alert("Error: " + err.message);
+          btn.innerText = "সেভ এবং অটো-র‍্যাঙ্ক";
+          btn.disabled  = false;
+        })
+        .saveConfiguration(config);
+    }
+  </script>
+</body>
+</html>
