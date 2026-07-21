@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DreamRise Result Portal</title>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@300;400;600;700;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1e40af;
+      --theme-color: #2563eb;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #1e293b;
+      --text-light: #64748b;
+      --border: #e2e8f0;
+      --shadow: rgba(0,0,0,0.1);
+    }
+
+    body.dark-mode {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --text: #f1f5f9;
+      --text-light: #94a3b8;
+      --border: #334155;
+      --shadow: rgba(0,0,0,0.3);
+    }
+
+    body.theme-pass { --theme-color: var(--success); --primary: var(--success); --primary-dark: #059669; }
+    body.theme-fail { --theme-color: var(--danger); --primary: var(--danger); --primary-dark: #b91c1c; }
+
+    body {
+      font-family: 'Anek Bangla', 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      transition: background 0.4s ease, color 0.4s ease;
+      overflow-x: hidden;
+    }
+
+    .container { max-width: 1000px; margin: 0 auto; padding: 20px; }
+
+    /* ── Header ── */
+    .header {
+      background: #0f1f3d;
+      padding: 0;
+      text-align: center;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.35);
+      min-height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .header-logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 20px;
+      min-height: 80px;
+    }
+    .header-logo img {
+      height: 56px;
+      width: auto;
+      display: none;
+      object-fit: contain;
+    }
+    .header-logo-placeholder {
+      font-family: 'Anek Bangla', sans-serif;
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: rgba(255,255,255,0.9);
+      letter-spacing: 1px;
+    }
+
+    /* ── Exam Summary Bar ── */
+    .exam-summary-bar {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 20px;
+      margin: 20px 0;
+      text-align: center;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-light);
+      box-shadow: 0 4px 14px var(--shadow);
+      line-height: 1.6;
+    }
+    .exam-summary-bar .exam-summary-title {
+      display: block;
+      color: var(--theme-color);
+      font-size: 1.05rem;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    /* ── Search Section ── */
+    .search-section {
+      background: var(--card);
+      border-radius: 20px;
+      padding: 40px;
+      margin: 30px 0;
+      box-shadow: 0 10px 30px var(--shadow);
+      text-align: center;
+      border: 1px solid var(--border);
+    }
+    .search-title { font-size: 1.8rem; font-weight: 700; margin-bottom: 10px; color: var(--theme-color); }
+    .search-box { display: flex; gap: 15px; max-width: 500px; margin: 20px auto 0; flex-wrap: wrap; justify-content: center; }
+    .search-input {
+      flex: 1; min-width: 250px; padding: 15px 20px; font-size: 1.1rem;
+      border: 2px solid var(--border); border-radius: 12px;
+      background: var(--bg); color: var(--text);
+      font-family: 'Anek Bangla'; transition: 0.3s;
+    }
+    .search-input:focus { outline: none; border-color: var(--theme-color); }
+    .search-btn {
+      padding: 15px 35px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: white; border: none; border-radius: 12px;
+      font-size: 1.1rem; font-weight: 700; cursor: pointer;
+      transition: 0.3s; font-family: 'Anek Bangla';
+    }
+    .search-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(37,99,235,0.35); }
+
+    /* ── Result Card ── */
+    .result-card {
+      display: none;
+      background: var(--card);
+      border-radius: 24px;
+      padding: 40px;
+      box-shadow: 0 15px 40px var(--shadow);
+      border: 2px solid var(--theme-color);
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 30px;
+    }
+    .result-card.active { display: block; animation: slideUp 0.6s cubic-bezier(0.16,1,0.3,1); }
+
+    /* Fail shake */
+    .result-card.shake {
+      animation: shakeCard 0.6s cubic-bezier(.36,.07,.19,.97) both;
+    }
+    @keyframes shakeCard {
+      10%,90%  { transform: translateX(-4px); }
+      20%,80%  { transform: translateX(6px); }
+      30%,50%,70% { transform: translateX(-8px); }
+      40%,60%  { transform: translateX(8px); }
+    }
+
+    @keyframes slideUp { from { opacity:0; transform:translateY(40px); } to { opacity:1; transform:translateY(0); } }
+
+    .card-shine {
+      position: absolute; top:0; left:0; right:0; bottom:0;
+      background: radial-gradient(circle at var(--x) var(--y), rgba(255,255,255,0.15) 0%, transparent 50%);
+      pointer-events: none; z-index:1;
+    }
+
+    /* ── Stats Grid ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px,1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+      position: relative; z-index:2;
+    }
+    .stat-card {
+      background: var(--bg);
+      padding: 20px;
+      border-radius: 15px;
+      text-align: center;
+      border: 1px solid var(--border);
+      transition: transform 0.2s;
+    }
+    .stat-card:hover { transform: translateY(-3px); }
+    .stat-value { font-size: 2rem; font-weight: 800; color: var(--theme-color); font-family:'Inter'; }
+    .stat-label { color: var(--text-light); font-weight: 600; margin-top: 5px; }
+
+    /* ── Info Grid ── */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px,1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+      position: relative; z-index:2;
+      align-items: start;
+    }
+    .info-card {
+      background: var(--bg);
+      padding: 22px 28px;
+      border-radius: 15px;
+      border: 1px solid var(--border);
+      min-width: 0;
+    }
+    .info-title { font-size:1.3rem; font-weight:700; color:var(--theme-color); margin-bottom:15px; border-bottom:2px solid var(--border); padding-bottom:10px; }
+
+    /* Fixed two-column grid: label column + value column.
+       The value column is NOT pushed flush to the card edge —
+       it starts right after a comfortable gap from the label,
+       so it never crowds the right border. */
+    .info-row {
+      display: grid;
+      grid-template-columns: minmax(90px, 38%) 1fr;
+      align-items: baseline;
+      column-gap: 18px;
+      row-gap: 4px;
+      padding: 11px 10px 11px 6px;
+      border-bottom: 1px dashed var(--border);
+      font-size: 1.05rem;
+      min-width: 0;
+    }
+    .info-row:last-child { border-bottom: none; }
+    .info-row > span:first-child {
+      color: var(--text-light);
+      font-weight: 600;
+    }
+    .info-value {
+      font-weight: 700;
+      color: var(--text);
+      text-align: right;
+      min-width: 0;
+      overflow-wrap: break-word;
+      word-break: break-word;
+      justify-self: end;
+    }
+    .dotted-underline { border-bottom:1.5px dotted var(--text); padding-bottom:2px; }
+
+    /* Narrow screens: keep the same two-column grid (just narrower label column)
+       instead of stacking, so label/value always stay comfortably away from
+       both the left and right edges. */
+    @media (max-width: 480px) {
+      .info-card { padding: 18px 18px; }
+      .info-row {
+        grid-template-columns: minmax(78px, 42%) 1fr;
+        column-gap: 12px;
+        padding: 10px 8px 10px 4px;
+        font-size: 0.98rem;
+      }
+    }
+
+    /* ── Subject Section ── */
+    .subject-section {
+      position:relative; z-index:2;
+      background:var(--bg); padding:25px; border-radius:15px;
+      border:1px solid var(--border); margin-bottom:30px; display:none;
+    }
+    .subject-item { margin-bottom:15px; padding-bottom:15px; border-bottom:1px solid var(--border); }
+    .subject-item:last-child { border-bottom: none; }
+    .subject-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+      font-weight: bold;
+      flex-wrap: wrap;
+    }
+    .subject-item-header .subject-name {
+      min-width: 0;
+      overflow-wrap: break-word;
+      word-break: break-word;
+    }
+    .subject-item-meta {
+      font-size: 0.9rem;
+      color: var(--text-light);
+      margin-top: 6px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 10px;
+    }
+    .progress-bar { height:10px; background:var(--border); border-radius:10px; overflow:hidden; margin-top:10px; }
+    .progress-fill { height:100%; background:var(--theme-color); border-radius:10px; transition:width 1s ease; }
+
+    /* ── Fail Banner ── */
+    .fail-banner {
+      display: none;
+      background: linear-gradient(135deg, #fff1f2, #fee2e2);
+      border: 2px solid #fca5a5;
+      border-radius: 16px;
+      padding: 20px 24px;
+      margin-bottom: 24px;
+      position: relative; z-index:2;
+      animation: bannerIn 0.5s ease forwards;
+    }
+    .fail-banner.show { display: block; }
+    @keyframes bannerIn {
+      from { opacity:0; transform: scale(0.95); }
+      to   { opacity:1; transform: scale(1); }
+    }
+    .fail-banner-title {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: #b91c1c;
+      margin-bottom: 8px;
+    }
+    .fail-banner-msg {
+      font-size: 1rem;
+      color: #7f1d1d;
+      line-height: 1.6;
+    }
+    .fail-banner-emoji {
+      font-size: 2rem;
+      margin-bottom: 8px;
+      display: block;
+    }
+    /* motivational tip rows */
+    .fail-tips { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .fail-tip {
+      display: flex; align-items: flex-start; gap: 8px;
+      background: rgba(255,255,255,0.7);
+      border-radius: 8px; padding: 8px 12px;
+      font-size: 0.92rem; color: #7f1d1d; font-weight: 600;
+    }
+    .fail-tip-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+
+    /* ── Actions ── */
+    .action-section {
+      display:flex; gap:15px; flex-wrap:wrap; justify-content:center;
+      margin-top:20px; position:relative; z-index:2;
+    }
+    .action-btn {
+      padding:12px 25px; background:var(--card); border:2px solid var(--border);
+      border-radius:12px; cursor:pointer; font-weight:700; color:var(--text);
+      font-family:'Anek Bangla'; transition:0.3s;
+      display:flex; align-items:center; gap:8px;
+    }
+    .action-btn:hover { background:var(--theme-color); color:white; border-color:var(--theme-color); }
+
+    /* ── Loading ── */
+    .loading { display:none; text-align:center; padding:50px 20px; }
+    .loading-inner { display:inline-flex; flex-direction:column; align-items:center; gap:16px; }
+    .loading-dots { display:flex; gap:10px; }
+    .loading-dots span {
+      width:14px; height:14px; border-radius:50%;
+      background:var(--theme-color);
+      animation: dotBounce 1.2s ease-in-out infinite;
+    }
+    .loading-dots span:nth-child(1) { animation-delay:0s; }
+    .loading-dots span:nth-child(2) { animation-delay:0.2s; }
+    .loading-dots span:nth-child(3) { animation-delay:0.4s; }
+    @keyframes dotBounce {
+      0%,80%,100% { transform:scale(0.6); opacity:0.4; }
+      40% { transform:scale(1.2); opacity:1; }
+    }
+    .loading-text { font-size:1.15rem; font-weight:700; color:var(--theme-color); }
+    .loading-sub  { font-size:0.88rem; color:var(--text-light); }
+
+    /* ── Dark Mode Toggle ── */
+    .dark-mode-toggle {
+      position:fixed; top:20px; right:20px;
+      background:var(--card); border:1px solid var(--border);
+      border-radius:50%; width:45px; height:45px;
+      cursor:pointer; z-index:1000; color:var(--text);
+      box-shadow: 0 2px 10px var(--shadow);
+      transition: 0.3s;
+    }
+    .dark-mode-toggle:hover { transform: scale(1.1); }
+
+    /* ── Celebration Popup ── */
+    .congrats-popup {
+      position:fixed; top:50%; left:50%;
+      transform:translate(-50%,-50%) scale(0.5);
+      opacity:0;
+      background: linear-gradient(135deg, #10b981, #059669);
+      color:white; padding:30px 45px; border-radius:24px;
+      font-size:2rem; font-weight:800; z-index:9999;
+      transition:0.35s cubic-bezier(0.175,0.885,0.32,1.275);
+      pointer-events:none; text-align:center;
+      box-shadow:0 20px 60px rgba(0,0,0,0.3);
+    }
+    .congrats-popup.show { transform:translate(-50%,-50%) scale(1); opacity:1; }
+
+    /* ── #1 Crown Badge ── */
+    .crown-badge {
+      display: none;
+      text-align: center;
+      margin-bottom: 20px;
+      position: relative; z-index: 2;
+    }
+    .crown-badge.show { display: block; }
+    .crown-badge .crown-inner {
+      display: inline-block;
+      background: linear-gradient(135deg, #fbbf24, #f59e0b, #d97706);
+      border-radius: 20px;
+      padding: 16px 32px;
+      box-shadow: 0 8px 32px rgba(251,191,36,0.4);
+      animation: crownPulse 2s ease-in-out infinite;
+    }
+    @keyframes crownPulse {
+      0%,100% { box-shadow: 0 8px 32px rgba(251,191,36,0.4); }
+      50% { box-shadow: 0 12px 48px rgba(251,191,36,0.7); }
+    }
+    .crown-badge .crown-text {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: #fff;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .crown-badge .crown-sub {
+      font-size: 0.9rem;
+      color: rgba(255,255,255,0.85);
+      margin-top: 4px;
+      font-weight: 600;
+    }
+
+    /* ── Footer ── */
+    .footer { text-align:center; padding:40px 0; border-top:1px solid var(--border); margin-top:40px; }
+    .footer-logo { height:44px; width:auto; border-radius:8px; margin-bottom:14px; }
+    .social-links { margin-bottom:20px; }
+    .social-links a { font-size:2.2rem; margin:0 12px; transition:0.3s; display:inline-block; text-decoration:none; }
+    .social-links a:hover { transform:translateY(-5px); filter:brightness(1.2); }
+    .fa-facebook { color:#1877F2; }
+    .fa-youtube  { color:#FF0000; }
+    .fa-whatsapp { color:#25D366; }
+    .fa-telegram { color:#0088cc; }
+    .contact-email { display:block; margin-top:10px; color:var(--text-light); font-weight:600; text-decoration:none; font-family:'Inter'; }
+
+    /* ── Small screen tweaks for cards & titles ── */
+    @media (max-width: 480px) {
+      .search-section { padding: 26px 18px; }
+      .result-card { padding: 22px 16px; }
+      .stat-value { font-size: 1.5rem; }
+      .info-title { font-size: 1.1rem; }
+    }
+
+    /* ─────────────── PRINT STYLES ─────────────── */
+    .print-header, .print-ascii { display:none; }
+
+    @media print {
+      @page { size:A4 portrait; margin:6mm; }
+
+      html, body {
+        height:auto !important;
+        overflow:visible !important;
+        background:#fff !important;
+        color:#000 !important;
+        padding:0; margin:0;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      /* Hide everything except result card */
+      .header, .exam-summary-bar, .search-section,
+      .action-section, .footer, .dark-mode-toggle,
+      .card-shine, .celebration, #errorMessage,
+      .loading, #congratsPopup, .crown-badge,
+      .fail-banner { display:none !important; }
+
+      .container { max-width:100%; padding:0; margin:0; }
+
+      .result-card {
+        display:block !important;
+        border:2px solid #000 !important;
+        box-shadow:none !important;
+        padding:10px 14px !important;
+        border-radius:0; margin:0 !important;
+        width:100%;
+      }
+
+      /* Print header with logo */
+      .print-header {
+        display:block !important;
+        text-align:center;
+        border-bottom:2px solid #000;
+        padding-bottom:6px;
+        margin-bottom:10px;
+      }
+      .print-header img {
+        height:44px;
+        width:auto;
+        display:block;
+        margin:0 auto 4px;
+        object-fit:contain;
+      }
+      .print-header .print-title { font-size:15pt; font-weight:800; color:#000; margin:2px 0; }
+      .print-header .print-sub   { font-size:8.5pt; color:#444; margin:2px 0; }
+
+      .stats-grid {
+        display:grid !important;
+        grid-template-columns:repeat(4,1fr) !important;
+        gap:8px !important;
+        margin-bottom:10px !important;
+      }
+      .stat-card { padding:6px !important; border:1.5px solid #000 !important; }
+      .stat-value { font-size:13pt !important; color:#000 !important; }
+      .stat-label { font-size:7.5pt !important; }
+
+      .info-grid { gap:8px !important; margin-bottom:10px !important; }
+      .info-card { padding:8px 12px !important; border:1.5px solid #000 !important; }
+      .info-title { font-size:10pt !important; color:#000 !important; border-bottom:1.5px solid #000 !important; margin-bottom:5px !important; padding-bottom:3px !important; }
+      .info-row { font-size:9pt !important; padding:3px 0 !important; border-bottom:1px dashed #ccc !important; }
+      .info-row:last-child { border-bottom:none !important; }
+      .info-value { color:#000 !important; font-weight:bold; }
+      .dotted-underline { border-bottom:1.5px dotted #000 !important; }
+
+      .subject-section { display:block !important; padding:8px 12px !important; margin-bottom:0 !important; }
+      .subject-item { margin-bottom:4px !important; padding-bottom:4px !important; border-bottom:1px solid #000 !important; }
+      .subject-item:last-child { border-bottom:none !important; }
+      .subject-item-meta { font-size:8.5pt !important; }
+      .progress-bar { display:none !important; }
+      .print-ascii { display:block !important; font-family:monospace; font-size:7.5pt; margin-top:2px; }
+    }
+  </style>
+</head>
+<body onmousemove="updateMousePosition(event)">
+
+  <button class="dark-mode-toggle" onclick="toggleDarkMode()" aria-label="ডার্ক মোড টগল করুন"><i class="fas fa-moon"></i></button>
+
+  <!-- Congrats Popup (Top 3) -->
+  <div id="congratsPopup" class="congrats-popup">
+    🏆 অসাধারণ সাফল্য! 🏆<br>
+    <span style="font-size:1.1rem; font-weight:600; opacity:0.9;">তুমি শীর্ষে আছো!</span>
+  </div>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-logo">
+      <img id="headerLogo" src="" alt="DreamRise"
+           onload="this.style.display='block'; document.getElementById('headerPlaceholder').style.display='none';"
+           onerror="this.style.display='none'; document.getElementById('headerPlaceholder').style.display='block';">
+      <span id="headerPlaceholder" class="header-logo-placeholder">DreamRise</span>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <!-- Exam Summary Bar -->
+    <div class="exam-summary-bar" id="examSummaryBar" style="display:none;">
+      <span class="exam-summary-title" id="examSummaryTitle">-</span>
+      <span id="examSummaryText">-</span>
+    </div>
+
+    <!-- Search -->
+    <div class="search-section">
+      <h1 class="search-title">রেজাল্ট পোর্টাল</h1>
+      <p style="color:var(--text-light); font-weight:600;">আপনার মোবাইল নম্বর দিয়ে ফলাফল খুঁজুন</p>
+      <div class="search-box">
+        <input type="text" id="phoneInput" class="search-input"
+               placeholder="মোবাইল নম্বর লিখুন (English/বাংলা)"
+               onkeypress="if(event.key==='Enter') searchResult()">
+        <button class="search-btn" onclick="searchResult()">
+          <i class="fas fa-search"></i> খুঁজুন
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div class="loading" id="loading">
+      <div class="loading-inner">
+        <div class="loading-dots"><span></span><span></span><span></span></div>
+        <div class="loading-text" id="loadingText">ফলাফল হিসাব করা হচ্ছে...</div>
+        <div class="loading-sub">একটু অপেক্ষা করো</div>
+      </div>
+    </div>
+    <div id="errorMessage" style="display:none; color:red; text-align:center; font-weight:bold; margin-bottom:20px;"></div>
+
+    <!-- Result Card -->
+    <div class="result-card" id="resultCard">
+      <div class="card-shine" id="shine"></div>
+
+      <!-- Print-only header with logo -->
+      <div class="print-header">
+        <img id="printLogo" src="" alt="DreamRise"
+             onerror="this.style.display='none'">
+        <div class="print-title">DreamRise</div>
+        <div class="print-sub">Official Admission Assessment Result | Your path to smart Admission</div>
+        <div id="printSummaryText" style="font-size:8pt; color:#333; margin-top:3px; font-weight:600;"></div>
+      </div>
+
+      <!-- #1 Crown Badge -->
+      <div class="crown-badge" id="crownBadge">
+        <div class="crown-inner">
+          <div class="crown-text">👑 প্রথম স্থান! তুমিই সেরা এবার! 👑</div>
+          <div class="crown-sub">এই পরীক্ষায় তুমিই এখন সর্বোচ্চ নম্বর অর্জন করেছ</div>
+        </div>
+      </div>
+
+      <!-- Celebration / Fail Banner -->
+      <div class="celebration" id="celebration"
+           style="padding:15px; border-radius:10px; text-align:center; margin-bottom:25px; font-weight:bold;"></div>
+
+      <!-- Fail Motivational Banner -->
+      <div class="fail-banner" id="failBanner">
+        <span class="fail-banner-emoji" id="failEmoji">💪</span>
+        <div class="fail-banner-title" id="failTitle">ভেঙে পড়বে না!</div>
+        <div class="fail-banner-msg" id="failMsg">এবার না হলেও পরেরবার হবে ইনশাআল্লাহ।</div>
+        <div class="fail-tips" id="failTips"></div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="r-rank">-</div>
+          <div class="stat-label">মেধা স্থান</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="r-score">-</div>
+          <div class="stat-label">প্রাপ্ত স্কোর</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="r-correct">-</div>
+          <div class="stat-label">সঠিক উত্তর</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="r-perc">-</div>
+          <div class="stat-label">Percentile</div>
+        </div>
+      </div>
+
+      <!-- Info -->
+      <div class="info-grid">
+        <div class="info-card">
+          <div class="info-title">ব্যক্তিগত তথ্য</div>
+          <div class="info-row"><span>নাম:</span> <span class="info-value dotted-underline" id="r-name">-</span></div>
+          <div class="info-row"><span>জেলা:</span> <span class="info-value dotted-underline" id="r-dist">-</span></div>
+          <div class="info-row"><span>ফোন নম্বর:</span> <span class="info-value dotted-underline" id="r-phone">-</span></div>
+          <div class="info-row"><span>ফলাফল:</span> <span class="info-value" id="r-result">-</span></div>
+        </div>
+        <div class="info-card">
+          <div class="info-title">পরীক্ষার বিবরণ</div>
+          <div class="info-row"><span>পরীক্ষা:</span> <span class="info-value dotted-underline" id="r-exam">-</span></div>
+          <div class="info-row">
+            <span>চেষ্টা / সঠিক / ভুল:</span>
+            <span class="info-value">
+              <span id="r-attempt">-</span> / <span id="r-correct2" style="color:var(--success)">-</span> / <span id="r-wrong" style="color:var(--danger)">-</span>
+            </span>
+          </div>
+          <div class="info-row"><span>পূর্ণমান:</span> <span class="info-value" id="r-full">-</span></div>
+          <div class="info-row">
+            <span>প্রতি প্রশ্নের মান:</span>
+            <span class="info-value" id="r-per-q">-</span>
+          </div>
+          <div class="info-row">
+            <span>নেগেটিভ মার্ক (প্রতি ভুলে):</span>
+            <span class="info-value" id="r-neg-mark" style="color:var(--danger)">-</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Subjects -->
+      <div class="subject-section" id="subjectSection">
+        <div class="info-title" style="border:none;">বিষয়ভিত্তিক ফলাফল</div>
+        <div id="subjectList"></div>
+      </div>
+
+      <!-- Actions -->
+      <div class="action-section">
+        <button class="action-btn" onclick="window.print()"><i class="fas fa-print"></i> ডাউনলোড / প্রিন্ট</button>
+        <button class="action-btn" onclick="copyDetailedResult()"><i class="fas fa-copy"></i> রেজাল্ট কপি করুন</button>
+        <button class="action-btn" onclick="resetSearch()"><i class="fas fa-redo"></i> নতুন সার্চ</button>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <img id="footerLogo" class="footer-logo" src="" alt="DreamRise" style="display:none" onerror="this.style.display='none'">
+      <div class="social-links">
+        <a href="https://www.facebook.com/profile.php?id=61585914941708" target="_blank" rel="noopener noreferrer" aria-label="Facebook"><i class="fab fa-facebook"></i></a>
+        <a href="https://www.youtube.com/channel/UCx09xf3IrcncsCPXYlegwJw" target="_blank" rel="noopener noreferrer" aria-label="YouTube"><i class="fab fa-youtube"></i></a>
+        <a href="https://wa.me/8801766129952" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp"><i class="fab fa-whatsapp"></i></a>
+        <a href="https://t.me/8801766129952" target="_blank" rel="noopener noreferrer" aria-label="Telegram"><i class="fab fa-telegram"></i></a>
+      </div>
+      <a href="mailto:dreamrisead2026@gmail.com" class="contact-email"><i class="fas fa-envelope"></i> dreamrisead2026@gmail.com</a>
+      <p style="font-weight:600; margin-top:15px; color:var(--text-light);">
+        © 2026 DreamRise System | Developed By
+        <a href="https://www.facebook.com/muhammadibrahimsiddiknasib" target="_blank" rel="noopener noreferrer"><i class="fab fa-facebook"></i></a>
+        Ibrahim | All Rights Reserved
+      </p>
+    </div>
+  </div>
+
+  <script>
+    /* ══════════════════════════════════════════
+       LOGO MANAGEMENT
+       Light logo URL — সাদা বা হালকা bg-তে ব্যবহার
+       Dark logo URL  — নেভি/dark bg-তে ব্যবহার
+       ══════════════════════════════════════════ */
+    const LIGHT_LOGO_URL = "https://github.com/ibrahimsiddiknasib-glitch/DreamRise/blob/main/Logo_For_light.png?raw=true";
+    const DARK_LOGO_URL  = "https://github.com/ibrahimsiddiknasib-glitch/DreamRise/blob/main/Logo_For_Dark.png?raw=true";
+
+    function setLogo(elId, url, show) {
+      const el = document.getElementById(elId);
+      if (!el) return;
+      el.src = url;
+      el.style.display = show ? 'block' : 'none';
+    }
+
+    function applyLogos() {
+      const isDark = document.body.classList.contains('dark-mode');
+      // Header: dark bg সবসময় → dark logo
+      setLogo('headerLogo', DARK_LOGO_URL, true);
+      // Print: white bg → light logo
+      setLogo('printLogo',  LIGHT_LOGO_URL, true);
+      // Footer: theme-aware
+      setLogo('footerLogo', isDark ? DARK_LOGO_URL : LIGHT_LOGO_URL, true);
+    }
+
+    function toggleDarkMode() {
+      document.body.classList.toggle('dark-mode');
+      const isDark = document.body.classList.contains('dark-mode');
+      document.querySelector('.dark-mode-toggle i').className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+      applyLogos();
+    }
+
+    /* Mouse shine effect */
+    function updateMousePosition(e) {
+      const card = document.getElementById('resultCard');
+      const rect = card.getBoundingClientRect();
+      document.getElementById('shine').style.setProperty('--x', `${e.clientX - rect.left}px`);
+      document.getElementById('shine').style.setProperty('--y', `${e.clientY - rect.top}px`);
+    }
+
+    /* Summary bar — Examinees ও Passed লুকানো */
+    function portalSummary(text) {
+      if (!text) return text;
+      return text.split(' | ')
+        .filter(part => !/^(Examinees|Passed):/.test(part.trim()))
+        .join(' | ');
+    }
+
+    /* বাংলা → English সংখ্যা */
+    function convertToEnglish(str) {
+      const bn = {'০':'0','১':'1','২':'2','৩':'3','৪':'4','৫':'5','৬':'6','৭':'7','৮':'8','৯':'9'};
+      return str.replace(/[০-৯]/g, d => bn[d]);
+    }
+
+    /* ══════════ CONFETTI — Top 1 বেশি, Top 3 পর্যন্ত ══════════ */
+    function triggerRank1Confetti() {
+      const end = Date.now() + 3000;
+      (function frame() {
+        confetti({ particleCount: 12, angle: 60,  spread: 70, origin: { x: 0,   y: 1 }, colors:['#fbbf24','#f59e0b','#10b981','#3b82f6'], zIndex:9999 });
+        confetti({ particleCount: 12, angle: 120, spread: 70, origin: { x: 1,   y: 1 }, colors:['#fbbf24','#f59e0b','#10b981','#3b82f6'], zIndex:9999 });
+        confetti({ particleCount: 6,  angle: 270, spread: 60, origin: { x: 0.5, y: 0 }, colors:['#fbbf24','#a78bfa'],                     zIndex:9999 });
+        if (Date.now() < end) requestAnimationFrame(frame);
+      }());
+    }
+
+    function triggerTop3Confetti() {
+      const end = Date.now() + 1800;
+      (function frame() {
+        confetti({ particleCount: 6, angle: 60,  spread: 55, origin: { x: 0, y: 1 }, zIndex:9999 });
+        confetti({ particleCount: 6, angle: 120, spread: 55, origin: { x: 1, y: 1 }, zIndex:9999 });
+        if (Date.now() < end) requestAnimationFrame(frame);
+      }());
+    }
+
+    function triggerPassConfetti() {
+      const end = Date.now() + 1000;
+      (function frame() {
+        confetti({ particleCount: 5, origin: { x: Math.random(), y: Math.random()-0.2 }, zIndex:9999 });
+        if (Date.now() < end) requestAnimationFrame(frame);
+      }());
+    }
+
+    /* ══════════ FAIL SHAKE ══════════ */
+    function triggerFailShake() {
+      const card = document.getElementById('resultCard');
+      card.classList.remove('shake');
+      // reflow so animation replays
+      void card.offsetWidth;
+      card.classList.add('shake');
+      setTimeout(() => card.classList.remove('shake'), 700);
+    }
+
+    /* ══════════ FAIL MOTIVATIONAL MESSAGES ══════════
+       থ্রেশহোল্ড এখন শতাংশ-ভিত্তিক (ভুল / মোট প্রশ্ন),
+       তাই পরীক্ষার আকার (১০০ বা ২০০ প্রশ্ন) যাই হোক না কেন
+       সঠিকভাবে ক্যাটাগরি নির্বাচন হবে। */
+    const failMessages = [
+      {
+        emoji: '💪',
+        title: 'হাল ছেড়ো না!',
+        msg: 'একবার ব্যর্থতা মানে চিরতরে শেষ নয়। আজকের কষ্টটাই আগামীকালের সাফল্যের ভিত্তি।',
+        tips: [
+          { icon: '📖', text: 'প্রতিদিন নির্দিষ্ট সময় পড়াশোনা করো, routine মেনে চলো' },
+          { icon: '❌', text: 'ভুল করা প্রশ্নগুলো আবার অনুশীলন করো' },
+          { icon: '🎯', text: 'পরের পরীক্ষার লক্ষ্য ঠিক করো এবং সেই অনুযায়ী প্রস্তুতি নাও' },
+        ]
+      },
+      {
+        emoji: '🌟',
+        title: 'তুমি পারবেই!',
+        msg: 'প্রতিটি মহান সাফল্যের পেছনে থাকে বারবার চেষ্টার গল্প। তোমার পালা আসবেই।',
+        tips: [
+          { icon: '⏰', text: 'সময় নষ্ট না করে এখনই প্রস্তুতি শুরু করো' },
+          { icon: '👥', text: 'পজিটিভ বন্ধুদের সাথে ভালো সম্পর্ক করো' },
+          { icon: '💡', text: 'দুর্বল বিষয়গুলো চিহ্নিত করে সেখানে বেশি মনোযোগ দাও' },
+        ]
+      },
+      {
+        emoji: '🔥',
+        title: 'আবার উঠে দাঁড়াও!',
+        msg: 'যারা কখনো পড়েনি তারা উঠতেও জানে না। তুমি পড়েছ, তাই তুমি উঠতে পারবে।',
+        tips: [
+          { icon: '📝', text: 'প্রতিটি ভুল থেকে শিখো এবং নোট রাখো' },
+          { icon: '🏋️', text: 'শরীর ও মন সুস্থ রাখো — পর্যাপ্ত ঘুমাও, ব্যায়াম করো' },
+          { icon: '🚀', text: 'DreamRise এর সাথে থাকো, আমরা তোমার পাশে আছি' },
+        ]
+      }
+    ];
+
+    function showFailBanner(wrongCount, totalQ) {
+      const pool = failMessages;
+      const safeTotalQ = totalQ > 0 ? totalQ : 1;
+      const wrongPct = (wrongCount / safeTotalQ) * 100;
+
+      let idx = 0;
+      if (wrongPct >= 60) idx = 2;
+      else if (wrongPct >= 30) idx = 1;
+      else idx = 0;
+
+      const m = pool[idx];
+      document.getElementById('failEmoji').textContent = m.emoji;
+      document.getElementById('failTitle').textContent = m.title;
+      document.getElementById('failMsg').textContent   = m.msg;
+
+      const tipsEl = document.getElementById('failTips');
+      tipsEl.innerHTML = m.tips.map(t =>
+        `<div class="fail-tip"><span class="fail-tip-icon">${t.icon}</span><span>${t.text}</span></div>`
+      ).join('');
+
+      document.getElementById('failBanner').classList.add('show');
+    }
+
+    /* ══════════ STATE ══════════ */
+    let currentData  = null;
+    let currentPhone = '';
+    let examMeta     = null;
+
+    /* ══════════ LOAD EXAM INFO (on page load) ══════════ */
+    function loadExamInfo() {
+      google.script.run
+        .withSuccessHandler(applyExamInfo)
+        .withFailureHandler(() => {})
+        .getExamInfo();
+    }
+
+    function applyExamInfo(meta) {
+      if (!meta) return;
+      examMeta = meta;
+      // লোগো
+      applyLogos();
+      if (meta.summaryText) {
+        document.getElementById('examSummaryTitle').innerText =
+          (meta.examName ? meta.examName + ' — সারসংক্ষেপ' : 'পরীক্ষার সারসংক্ষেপ');
+        document.getElementById('examSummaryText').innerText = portalSummary(meta.summaryText);
+        document.getElementById('examSummaryBar').style.display = 'block';
+        document.getElementById('printSummaryText').innerText = portalSummary(meta.summaryText);
+      }
+    }
+
+    /* ══════════ SEARCH ══════════ */
+    function searchResult() {
+      let phone = convertToEnglish(document.getElementById('phoneInput').value.trim());
+      if (!phone) return alert('তোমার মোবাইল নম্বর দাও');
+
+      currentPhone = phone;
+      document.getElementById('loading').style.display = 'block';
+      document.getElementById('resultCard').classList.remove('active');
+      document.getElementById('errorMessage').style.display = 'none';
+
+      const msgs = [
+        'ফলাফল হিসাব করা হচ্ছে...',
+        'তোমার তথ্য খোঁজা হচ্ছে...',
+        'র‍্যাংকিং যাচাই করা হচ্ছে...',
+        'একটু অপেক্ষা করো...'
+      ];
+      let mi = 0;
+      window._loadingTimer = setInterval(() => {
+        mi = (mi + 1) % msgs.length;
+        const el = document.getElementById('loadingText');
+        if (el) el.innerText = msgs[mi];
+      }, 1800);
+
+      google.script.run
+        .withSuccessHandler(displayResult)
+        .withFailureHandler(() => {
+          clearInterval(window._loadingTimer);
+          document.getElementById('loading').style.display = 'none';
+          alert('সার্ভার ত্রুটি!');
+        })
+        .searchStudent(phone);
+    }
+
+    /* ══════════ DISPLAY RESULT ══════════ */
+    function displayResult(data) {
+      clearInterval(window._loadingTimer);
+      document.getElementById('loading').style.display = 'none';
+
+      if (data.error) {
+        document.getElementById('errorMessage').innerText = data.error;
+        document.getElementById('errorMessage').style.display = 'block';
+        return;
+      }
+
+      currentData = data;
+      const isPass  = data.result === 'PASS' || data.result === 'পাস';
+      const rankNum = parseInt(convertToEnglish(String(data.rank)));
+
+      /* Theme */
+      const hasDark = document.body.classList.contains('dark-mode');
+      document.body.className = (isPass ? 'theme-pass' : 'theme-fail') + (hasDark ? ' dark-mode' : '');
+
+      /* Reset banners */
+      document.getElementById('failBanner').classList.remove('show');
+      document.getElementById('crownBadge').classList.remove('show');
+
+      /* Celebration bar */
+      const cele = document.getElementById('celebration');
+      if (isPass) {
+        cele.style.background = 'rgba(16,185,129,0.1)';
+        cele.style.color      = '#10b981';
+        cele.style.border     = '1px solid #10b981';
+        cele.innerHTML        = '🎉 অভিনন্দন! তুমি সফলভাবে উত্তীর্ণ হয়েছ।';
+      } else {
+        cele.style.background = 'rgba(239,68,68,0.08)';
+        cele.style.color      = '#ef4444';
+        cele.style.border     = '1px solid #ef4444';
+        cele.innerHTML        = '❌ দুঃখিত, এবার উত্তীর্ণ হওনি।';
+      }
+
+      /* Pass effects */
+      if (isPass && !isNaN(rankNum)) {
+        if (rankNum === 1) {
+          triggerRank1Confetti();
+          document.getElementById('crownBadge').classList.add('show');
+          const popup = document.getElementById('congratsPopup');
+          popup.classList.add('show');
+          setTimeout(() => popup.classList.remove('show'), 2500);
+        } else if (rankNum <= 3) {
+          triggerTop3Confetti();
+          const popup = document.getElementById('congratsPopup');
+          popup.innerHTML = `🏅 অভিনন্দন! তুমি Top ${rankNum}! 🏅<br><span style="font-size:1rem;opacity:0.85">অসাধারণ পারফরম্যান্স!</span>`;
+          popup.classList.add('show');
+          setTimeout(() => popup.classList.remove('show'), 2000);
+        } else {
+          triggerPassConfetti();
+        }
+      } else if (isPass) {
+        triggerPassConfetti();
+      } else {
+        /* Fail effects */
+        triggerFailShake();
+        showFailBanner(data.totalWrong || 0, data.meta.totalQ || 0);
+      }
+
+      /* Rank — ফেইলে "—" দেখাও */
+      document.getElementById('r-rank').innerText   = isPass ? data.rank : '—';
+      document.getElementById('r-score').innerText  = parseFloat(data.score).toFixed(2);
+      document.getElementById('r-correct').innerText= data.totalCorrect;
+      document.getElementById('r-perc').innerText   = parseFloat(data.percentile).toFixed(2) + '%';
+
+      document.getElementById('r-name').innerText   = data.name;
+      document.getElementById('r-dist').innerText   = data.district;
+      document.getElementById('r-phone').innerText  = currentPhone;
+
+      document.getElementById('r-result').innerHTML = isPass
+        ? '<span style="color:var(--success); font-weight:800;">✅ PASS</span>'
+        : '<span style="color:var(--danger); font-weight:800;">❌ FAIL</span>';
+
+      document.getElementById('r-exam').innerText   = data.meta.examName;
+
+      const totalCorrect = Number(data.totalCorrect) || 0;
+      const totalWrong   = Number(data.totalWrong) || 0;
+      const totalAttempt = totalCorrect + totalWrong;
+
+      /* চেষ্টা / সঠিক / ভুল — মোট প্রশ্ন সংখ্যা নয়, বরং যে কয়টা প্রশ্নে উত্তর দেওয়া হয়েছে সেটাই দেখাচ্ছে */
+      document.getElementById('r-attempt').innerText  = totalAttempt;
+      document.getElementById('r-correct2').innerText = totalCorrect;
+      document.getElementById('r-wrong').innerText    = totalWrong;
+      document.getElementById('r-full').innerText    = data.meta.fullMarks;
+
+      const totalQ    = Number(data.meta.totalQ) || 0;
+      const marksPerQ = totalQ > 0 ? (data.meta.fullMarks / totalQ) : 0;
+      const totalNeg  = (totalCorrect * marksPerQ) - data.score;
+      const negPerQ   = totalWrong > 0 ? (totalNeg / totalWrong) : 0;
+
+      document.getElementById('r-per-q').innerText    = marksPerQ > 0 ? marksPerQ.toFixed(2) : '0';
+      document.getElementById('r-neg-mark').innerText = negPerQ   > 0 ? negPerQ.toFixed(2)   : '0';
+
+      /* Summary bar update */
+      if (data.meta.summaryText) {
+        document.getElementById('examSummaryTitle').innerText = (data.meta.examName || '') + ' — সারসংক্ষেপ';
+        document.getElementById('examSummaryText').innerText  = portalSummary(data.meta.summaryText);
+        document.getElementById('examSummaryBar').style.display = 'block';
+        document.getElementById('printSummaryText').innerText = portalSummary(data.meta.summaryText);
+      }
+
+      /* Logos (in case they loaded from data) */
+      applyLogos();
+
+      /* Subjects */
+      const subSec = document.getElementById('subjectSection');
+      if (data.subjects && data.subjects.length > 0) {
+        subSec.style.display = 'block';
+        let subHtml = '';
+        const numSubjects = data.subjects.length || 1;
+        data.subjects.forEach(s => {
+          const sCorrect = Number(s.correct) || 0;
+          const sWrong   = Number(s.wrong) || 0;
+          const sAttempt = sCorrect + sWrong;
+          const sScore   = Number(s.score) || 0;
+
+          /* প্রগ্রেস বার এখন প্রাপ্ত নম্বরের ভিত্তিতে: score / বিষয়ের পূর্ণমান × ১০০
+             (attempted প্রশ্নের সংখ্যার ভিত্তিতে নয়)।
+             বিষয়ের পূর্ণমান বের করার অগ্রাধিকার:
+               ১) s.full  → backend থেকে সরাসরি বিষয়ের পূর্ণমান এলে সেটাই ব্যবহার হয় (সবচেয়ে সঠিক)
+               ২) s.total → বিষয়ের মোট প্রশ্ন সংখ্যা এলে, তা × প্রতি-প্রশ্নের-মান
+               ৩) fallback → পরীক্ষার মোট পূর্ণমানকে বিষয় সংখ্যা দিয়ে সমান ভাগ (assumption: সব বিষয়ে সমান নম্বর)
+             সম্পূর্ণ নির্ভুল ফলাফলের জন্য backend থেকে s.full বা s.total পাঠানো ভালো। */
+          let subjectFullMarks;
+          if (Number(s.full) > 0) {
+            subjectFullMarks = Number(s.full);
+          } else if (Number(s.total) > 0) {
+            subjectFullMarks = Number(s.total) * marksPerQ;
+          } else {
+            subjectFullMarks = (Number(data.meta.fullMarks) || 0) / numSubjects;
+          }
+
+          let per = subjectFullMarks > 0 ? Math.min((sScore / subjectFullMarks) * 100, 100) : 0;
+          if (isNaN(per) || !isFinite(per) || per < 0) per = 0;
+          per = per.toFixed(0);
+
+          const asciiBar = '[' + '#'.repeat(Math.round(per/2)) + '-'.repeat(50 - Math.round(per/2)) + '] ' + per + '%';
+          subHtml += `
+            <div class="subject-item">
+              <div class="subject-item-header">
+                <span class="subject-name">${s.name}</span><span>স্কোর: ${s.score}</span>
+              </div>
+              <div class="subject-item-meta">
+                <span>চেষ্টা: ${sAttempt}</span>
+                <span>সঠিক: ${sCorrect}</span>
+                <span>ভুল: ${sWrong}</span>
+                <span>পাস: ${s.pass}</span>
+              </div>
+              <div class="progress-bar"><div class="progress-fill" style="width:${per}%"></div></div>
+              <div class="print-ascii">${asciiBar}</div>
+            </div>`;
+        });
+        document.getElementById('subjectList').innerHTML = subHtml;
+      } else {
+        subSec.style.display = 'none';
+      }
+
+      document.getElementById('resultCard').classList.add('active');
+    }
+
+    /* ══════════ COPY ══════════ */
+    function copyDetailedResult() {
+      if (!currentData) return;
+      const d = currentData;
+      const isPass = d.result === 'PASS' || d.result === 'পাস';
+      const text = `
+🎓 DreamRise Official Result 🎓
+👤 পরীক্ষার্থী: ${d.name} | জেলা: ${d.district}
+📱 ফোন নম্বর: ${currentPhone}
+📝 পরীক্ষা: ${d.meta.examName}
+🏆 মেধা তালিকার স্থান: ${isPass ? d.rank : 'প্রযোজ্য নয়'} | প্রাপ্ত নাম্বার: ${parseFloat(d.score).toFixed(2)}
+✅ সঠিক: ${d.totalCorrect} | ❌ ভুল: ${d.totalWrong}
+🚩 ফলাফল: ${isPass ? '✅ PASS' : '❌ FAIL'}
+🔗 DreamRise - Your path to smart Admission 🚀`;
+      navigator.clipboard.writeText(text.trim()).then(() => alert('রেজাল্ট কপি হয়েছে!'));
+    }
+
+    /* ══════════ RESET ══════════ */
+    function resetSearch() {
+      document.getElementById('resultCard').classList.remove('active');
+      document.getElementById('phoneInput').value = '';
+      document.getElementById('failBanner').classList.remove('show');
+      document.getElementById('crownBadge').classList.remove('show');
+    }
+
+    /* Init */
+    applyLogos();
+    loadExamInfo();
+  </script>
+</body>
+</html>
