@@ -1,35 +1,32 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════╗
- * ║         DreamRise Web App — v70.0 (Self-Syncing Edition)         ║
+ * ║         DreamRise Web App — v72.0 (Race-Safe Edition)            ║
  * ║  Developer: Muhammad Ibrahim                                     ║
- * ║  Fixes from v69:                                                 ║
- * ║   ✅ NEW: Auto-Sync on Portal Search — শীট ম্যানুয়ালি না        ║
- * ║      খুললেও, স্টুডেন্ট যখন রেজাল্ট পোর্টালে ফোন নম্বর দিয়ে      ║
- * ║      সার্চ করবে, ব্যাকগ্রাউন্ডে নিজে থেকেই (≤১ মিনিট stale হলে) ║
- * ║      সিঙ্ক হয়ে যাবে। ২৪/৭ ফর্ম খোলা থাকলেও কেউ রেজাল্ট মিস     ║
- * ║      করবে না।                                                    ║
- * ║   ✅ LockService দিয়ে race-condition প্রতিরোধ — একসাথে অনেকে    ║
- * ║      এলেও মাত্র একজনের রিকোয়েস্টে sync চলবে, বাকিরা সেই         ║
- * ║      মুহূর্তের বিদ্যমান ডেটা থেকেই সার্চ পাবে (কখনো error/wait  ║
- * ║      হবে না)।                                                    ║
- * ║  Fixes from v68:                                                 ║
- * ║   ✅ FIXED: কয়েক ঘন্টা পর রেজাল্ট না পাওয়ার বাগ                ║
- * ║      (কারণ ছিল: CacheService ৬ ঘণ্টা পর মুছে যেত, fallback      ║
- * ║       ভঙ্গুর ছিল। এখন একটি permanent hidden "DR_Backup" শীটে    ║
- * ║       ডেটা রাখা হয় যা কখনো এক্সপায়ার হয় না)                   ║
- * ║   ✅ Exam Summary bar (Total Q, Full Marks, Pass Mark,           ║
- * ║      Avg, Highest) — Ranking Page, PDF Report, Web App সব        ║
- * ║      জায়গায় দেখানো হয়                                          ║
- * ║   ✅ DreamRise Logo (ছবি) — Setup Wizard, Ranking Page,          ║
- * ║      PDF Report এবং Web App হেডারে যুক্ত                        ║
- * ║   ✅ JSON প্রিন্টে আর আসবে না (note & hidden cell দুটোই বন্ধ)  ║
- * ║   ✅ Multi-page print সঠিকভাবে কাজ করে (print area explicit)   ║
- * ║   ✅ শুধু Top-3 সবুজ, বাকি সব সাদা/ধূসর (zebra stripe)        ║
- * ║   ✅ Smart Debounce Auto-Rank (30s delay, form=instant)         ║
- * ║   ✅ Tie-breaker: same score → কম ভুল = ভালো rank              ║
- * ║   ✅ Duplicate phone filter + short phone skip                  ║
- * ║   ✅ Answer Key row double-check (name+position)                ║
- * ║   ✅ Statistics Dialog                                           ║
+ * ║  Fixes from v71 (এই আপডেটে):                                     ║
+ * ║   ✅ FIXED: "Setup-এ ঠিক ছিল, auto-sync-এর পর নম্বর বদলে গেছে"   ║
+ * ║      বাগ — আসল কারণ ছিল calculateAndRank()-এ কোনো LockService    ║
+ * ║      ছিল না। বার্স্ট ফর্ম-সাবমিশনে একাধিক calculateAndRank()      ║
+ * ║      সমান্তরালে চলে একে অপরের cache/backup write চাপা দিয়ে       ║
+ * ║      দিত। এখন পুরো ফাংশনটা LockService দিয়ে serialize করা।       ║
+ * ║   ✅ FIXED: computeSingleStudentAndMerge()-এ lost-update race —   ║
+ * ║      আগে lock নেওয়ার আগেই পুরনো payload পড়া হতো, দুইজন প্রায়     ║
+ * ║      একসাথে সার্চ করলে একজনের merge আরেকজনেরটা মুছে ফেলত। এখন     ║
+ * ║      lock নেওয়ার পরে freshly payload আবার পড়া হয়।                ║
+ * ║   ✅ FIXED: ফোন-নম্বর normalize এখন সব জায়গায় (dedupe + search)  ║
+ * ║      একই ফাংশন normalizePhone() ব্যবহার করে — আগে dedupe পুরো     ║
+ * ║      digit-string আর search শেষ ১০ ডিজিট দিয়ে হতো, ফলে একই        ║
+ * ║      স্টুডেন্ট দুইভাবে ফোন লিখলে দুইটা আলাদা এন্ট্রি তৈরি হতো।     ║
+ * ║   ✅ NEW: Form Submit এখন ৮ সেকেন্ড debounce হয় (আগে প্রতি         ║
+ * ║      সাবমিশনে সরাসরি ভারী রিক্যাল্ক চলত) — বার্স্ট সাবমিশনে       ║
+ * ║      একবারই চলে, স্পিড বাড়ে + race window কমে।                    ║
+ * ║   ✅ NEW: Header-row detection এখন শুধু প্রথম কয়েক row-এ           ║
+ * ║      সীমাবদ্ধ (আগে পুরো শীট স্ক্যান করত, ভুল row ধরার ঝুঁকি ছিল)। ║
+ * ║   ✅ NEW: Answer Key row-এর নাম বদলে গেলে (শীট সর্ট/এডিট হলে)      ║
+ * ║      টোস্ট দিয়ে সতর্ক করে দেয়, silently ভুল স্কোরিং করে না।       ║
+ * ║  Fixes from v70/v69/v68 (অপরিবর্তিত, নিচে বহাল আছে):              ║
+ * ║   ✅ Auto-Sync on Portal Search, permanent DR_Backup sheet,       ║
+ * ║      exact-text answer matching, Exam Summary bar, Logo,          ║
+ * ║      multi-page print, Statistics Dialog ইত্যাদি।                 ║
  * ╚══════════════════════════════════════════════════════════════════╝
  */
 
@@ -54,6 +51,14 @@ const DR_AUTO_SYNC_MAX_AGE_MS = 60 * 1000;
 // Lock অপেক্ষার সর্বোচ্চ সময় (মিলিসেকেন্ড) — এর বেশি হলে lock না পেয়েই
 // বিদ্যমান ডেটা দিয়ে এগিয়ে যাওয়া হবে, যাতে ইউজার কখনো আটকে না থাকে।
 const DR_LOCK_WAIT_MS = 8000;
+
+// ফর্ম সাবমিট বার্স্ট debounce — এর মধ্যে যতগুলো সাবমিশন আসুক, শেষেরটার
+// এই সময় পরে মাত্র একটাই পূর্ণাঙ্গ calculateAndRank() চলবে।
+const DR_FORM_SUBMIT_DEBOUNCE_MS = 8 * 1000;
+
+// শুধু প্রথম এত row-এর মধ্যে header (নাম/ফোন কলাম) খোঁজা হবে —
+// পুরো শীট স্ক্যান করলে কোনো ছাত্রের উত্তরে ভুলবশত মিলে যাওয়ার ঝুঁকি থাকে।
+const DR_HEADER_SEARCH_ROWS = 5;
 
 // ===================== MENU & SETUP =====================
 function onOpen(e) {
@@ -98,6 +103,9 @@ function saveConfiguration(config) {
       'subjectData':   JSON.stringify(config.subjects),
       'standardRange': config.standardRange || ""
     });
+    // নতুন করে সেভ হলে পুরনো "savedAnsKeyName" ভ্যালিডেশন মার্কারও মুছে দাও,
+    // যাতে নতুন Answer Key Row-কে ভুল করে "বদলে গেছে" মনে না করে।
+    PropertiesService.getScriptProperties().deleteProperty('savedAnsKeyName');
     setupAutomationTriggers();
     calculateAndRank();
     return "Success!";
@@ -122,14 +130,40 @@ function setupAutomationTriggers() {
   // 'onOpen' কে কখনো installable trigger হিসেবে রাখা উচিত নয় —
   // সেটা থাকলে time-based context-এ getUi() error দেয়।
   ScriptApp.getProjectTriggers().forEach(t => {
-    if (['calculateAndRank','onEditThrottled','runDebouncedRank','onOpen'].includes(t.getHandlerFunction())) {
+    if (['calculateAndRank','onEditThrottled','runDebouncedRank','onOpen','onFormSubmitThrottled'].includes(t.getHandlerFunction())) {
       ScriptApp.deleteTrigger(t);
     }
   });
-  // Form Submit → তাৎক্ষণিক rank
-  ScriptApp.newTrigger('calculateAndRank').forSpreadsheet(ss).onFormSubmit().create();
+  // FIXED (v72): Form Submit → এখন সরাসরি calculateAndRank() নয়, বরং একটা
+  // ছোট debounce (দেখুন onFormSubmitThrottled)। আগে প্রতিটা সাবমিশনে
+  // সরাসরি ভারী calculateAndRank() চলত — বার্স্ট সাবমিশনে (যেমন exam শেষে
+  // সবাই একসাথে সাবমিট করলে) একাধিক ইনস্ট্যান্স সমান্তরালে চলে একে অপরের
+  // cache/backup write নষ্ট করে দিত (কোনো Lock ছাড়াই)। এখন এই race window
+  // অনেক ছোট + কাজও দ্রুত হয়।
+  ScriptApp.newTrigger('onFormSubmitThrottled').forSpreadsheet(ss).onFormSubmit().create();
   // Manual Edit → debounce
   ScriptApp.newTrigger('onEditThrottled').forSpreadsheet(ss).onEdit().create();
+}
+
+/**
+ * FORM SUBMIT HANDLER (short debounce) — NEW in v72
+ * ---------------------------------------------------
+ * প্রতিটা সাবমিশনে সরাসরি ভারী calculateAndRank() চালানোর বদলে, শুধু একটা
+ * ছোট (৮ সেকেন্ড) timer রিসেট করে। বার্স্টে যতগুলোই সাবমিশন আসুক, শেষটার
+ * কয়েক সেকেন্ড পর মাত্র একবারই পূর্ণাঙ্গ recalculation চলবে — এতে (ক)
+ * সমান্তরাল calculateAndRank() রান হওয়ার সুযোগ প্রায় শূন্যে নেমে আসে, এবং
+ * (খ) বারবার একই ভারী কাজ (Ranking Page + PDF Report rebuild + Logo fetch)
+ * না হওয়ায় স্পিডও বাড়ে। কেউ সাবমিট করার সাথে সাথেই নিজের রেজাল্ট
+ * সার্চ করলে সেটা searchStudent()-এর টার্গেটেড fallback
+ * (computeSingleStudentAndMerge) থেকেই সাথে সাথে পাবে — কোনো বিলম্ব হবে না।
+ */
+function onFormSubmitThrottled(e) {
+  try {
+    ScriptApp.getProjectTriggers().forEach(t => {
+      if (t.getHandlerFunction() === 'runDebouncedRank') ScriptApp.deleteTrigger(t);
+    });
+    ScriptApp.newTrigger('runDebouncedRank').timeBased().after(DR_FORM_SUBMIT_DEBOUNCE_MS).create();
+  } catch(err) { console.error("onFormSubmitThrottled:", err); }
 }
 
 /**
@@ -193,6 +227,21 @@ function colIndexToLetter(n) {
 }
 
 /**
+ * FIXED (v72): এখন এটাই একমাত্র জায়গা যেখানে ফোন-নম্বর normalize হয় —
+ * সবসময় শেষ ১০ ডিজিট, digit-only। আগে dedupe (calculateAndRank) আর সার্চ
+ * (searchStudent/computeSingleStudentAndMerge/findStudentInMinifiedCache)
+ * আলাদা আলাদা normalize logic ব্যবহার করত (একটা পুরো digit-string, আরেকটা
+ * শেষ ১০ ডিজিট) — ফলে একই স্টুডেন্ট যদি ফোন নম্বর দুইভাবে লেখে
+ * (যেমন 01712345678 বনাম +8801712345678), dedupe এদের দুইজন আলাদা
+ * স্টুডেন্ট ধরে নিত, অথচ সার্চ পাথ এদের একজনই ধরত — ফলে কোন সাবমিশনটা
+ * "canonical" হবে তা নির্ভর করত কোন কোড-পাথ শেষে চলেছে তার উপর, আর নম্বর
+ * সিঙ্ক ভেদে পাল্টে যেত। এখন সব জায়গায় এই একই ফাংশন ব্যবহার হয়।
+ */
+function normalizePhone(raw) {
+  return String(raw || "").trim().replace(/\D/g, '').slice(-10);
+}
+
+/**
  * Multi-answer check.
  * FIXED (v71): আগে এই ফাংশন Answer Key-কে কমা (,) বা স্ল্যাশ (/) দিয়ে ভেঙে
  * একাধিক সঠিক উত্তর সাপোর্ট করার চেষ্টা করত। কিন্তু আসল exam ডেটাতে (Google
@@ -216,192 +265,231 @@ function buildSummaryText(meta) {
          `Examinees: ${meta.examinees} | Passed: ${meta.passCount} | Avg: ${meta.avg} | Highest: ${meta.highScore}`;
 }
 
+/** শুধু প্রথম কয়েক row-এর মধ্যে header (নাম/জেলা/ফোন কলাম যুক্ত row) খোঁজে। */
+function findHeaderRowIdx(rawData) {
+  const limit = Math.min(DR_HEADER_SEARCH_ROWS, rawData.length);
+  for (let i = 0; i < limit; i++) {
+    if (/name|full|নাম/i.test(rawData[i].join(" "))) return i;
+  }
+  return -1;
+}
+
 // ===================== MAIN RANKING ENGINE =====================
 function calculateAndRank() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  try { ss.toast('⏳ সিঙ্ক হচ্ছে...', '🚀 DreamRise', 3); } catch(x){}
 
-  const props = PropertiesService.getScriptProperties().getProperties();
-  if (!props.examName) {
-    try { SpreadsheetApp.getUi().alert("আগে Setup Wizard থেকে কনফিগারেশন সেভ করুন।"); } catch(x){}
-    return;
-  }
+  // FIXED (v72): মূল বাগ ফিক্স — এই পুরো ফাংশনটা এখন LockService দিয়ে
+  // serialize করা। আগে এখানে কোনো lock ছিল না, তাই বার্স্ট ফর্ম-সাবমিশনে
+  // একাধিক calculateAndRank() সমান্তরালে চলে একে অপরের cache/backup/
+  // ScriptProperties write চাপা দিয়ে দিত — এটাই ছিল "setup-এ ঠিক ছিল,
+  // auto-sync-এর পর নম্বর বদলে গেছে" সমস্যার আসল কারণ। এখন একসাথে
+  // সর্বোচ্চ একটাই instance চলবে; বাকিরা lock না পেয়ে নিরাপদে skip করবে
+  // (ডেটা হারায় না, কারণ debounce mechanism আবার নতুন রান শিডিউল করে দেয়)।
+  const lock = LockService.getScriptLock();
+  let gotLock = false;
+  try {
+    gotLock = lock.tryLock(DR_LOCK_WAIT_MS);
+    if (!gotLock) {
+      console.log("calculateAndRank: আরেকটা sync ইতিমধ্যে চলছে — এই কলটা skip করা হলো (duplicate/race এড়াতে)।");
+      return;
+    }
 
-  const sourceSheet  = ss.getSheets()[0];
-  const rawData      = sourceSheet.getDataRange().getValues();
+    try { ss.toast('⏳ সিঙ্ক হচ্ছে...', '🚀 DreamRise', 3); } catch(x){}
 
-  const isSubWise    = props.isSubjectWise === "true";
-  const subjects     = JSON.parse(props.subjectData || "[]");
-  const posMark      = parseFloat(props.posMark)  || 1;
-  const negMark      = parseFloat(props.negMark)  || 0;
-  const globalPassPct= parseFloat(props.globalPass)|| 0;
-  const ansKeyRowIdx = parseInt(props.ansKeyRow) - 1;
+    const props = PropertiesService.getScriptProperties().getProperties();
+    if (!props.examName) {
+      try { SpreadsheetApp.getUi().alert("আগে Setup Wizard থেকে কনফিগারেশন সেভ করুন।"); } catch(x){}
+      return;
+    }
 
-  // Question columns
-  let qCols = new Set();
-  if (isSubWise) {
-    subjects.forEach(sub => {
-      const [s, e2] = sub.range.split(':').map(colLetterToIndex);
-      for (let j = s; j <= e2; j++) qCols.add(j);
-    });
-  } else {
-    const [s, e2] = (props.standardRange || "A:A").split(':').map(colLetterToIndex);
-    for (let j = s; j <= e2; j++) qCols.add(j);
-  }
+    const sourceSheet  = ss.getSheets()[0];
+    const rawData      = sourceSheet.getDataRange().getValues();
 
-  // Header row
-  const titleRowIdx = rawData.findIndex(row => /name|full|নাম/i.test(row.join(" ")));
-  if (titleRowIdx === -1) { console.error("Header row not found!"); return; }
-  const titleRow = rawData[titleRowIdx];
+    const isSubWise    = props.isSubjectWise === "true";
+    const subjects     = JSON.parse(props.subjectData || "[]");
+    const posMark      = parseFloat(props.posMark)  || 1;
+    const negMark      = parseFloat(props.negMark)  || 0;
+    const globalPassPct= parseFloat(props.globalPass)|| 0;
+    const ansKeyRowIdx = parseInt(props.ansKeyRow) - 1;
 
-  let nCol = -1, dCol = -1, wCol = -1;
-  titleRow.forEach((h, j) => {
-    if (qCols.has(j)) return;
-    const head = String(h).toLowerCase();
-    if      (/নাম|name|student/i.test(head))             nCol = j;
-    else if (/জেলা|district|college|বিভাগ/i.test(head)) dCol = j;
-    else if (/whatsapp|phone|মোবাইল|contact/i.test(head))wCol = j;
-  });
-
-  if (nCol === -1 || wCol === -1) {
-    try { SpreadsheetApp.getUi().alert("নাম বা WhatsApp কলাম খুঁজে পাওয়া যায়নি।"); } catch(x){}
-    return;
-  }
-
-  const ansKeyRow   = rawData[ansKeyRowIdx];
-  const ansKeyName  = String(ansKeyRow[nCol] || "").trim();
-  const totalQCount = qCols.size;
-
-  let students = [], seen = new Set();
-  let passCount = 0, highScore = -Infinity, totalScoreSum = 0;
-
-  for (let i = 0; i < rawData.length; i++) {
-    if (i === titleRowIdx || i === ansKeyRowIdx) continue;
-    const row  = rawData[i];
-    const name = String(row[nCol] || "").trim();
-    // শুধু সংখ্যা রাখো, কমপক্ষে ৭ ডিজিট দরকার
-    const phone = String(row[wCol] || "").trim().replace(/\D/g, '');
-    if (!name || phone.length < 7) continue;
-    if (name === ansKeyName) continue;      // answer key row বাদ
-    if (seen.has(phone)) continue;          // duplicate বাদ
-    seen.add(phone);
-
-    let totalC = 0, totalW = 0, totalScore = 0, subFail = false, subDataForTable = [];
-
+    // Question columns
+    let qCols = new Set();
     if (isSubWise) {
       subjects.forEach(sub => {
         const [s, e2] = sub.range.split(':').map(colLetterToIndex);
-        let c = 0, w = 0;
-        for (let j = s; j <= e2; j++) {
-          const kA = ansKeyRow[j], sA = row[j];
-          if (String(kA).trim() !== "") {
-            if (String(sA).trim() !== "") {
-              if (isCorrect(sA, kA)) c++; else w++;
-            }
-          }
-        }
-        const score      = (c * posMark) - (w * negMark);
-        const subPassMark= parseFloat(sub.pass) || 0;
-        if (score < subPassMark) subFail = true;
-        totalC += c; totalW += w; totalScore += score;
-        subDataForTable.push(c, w, score.toFixed(2));
+        for (let j = s; j <= e2; j++) qCols.add(j);
       });
     } else {
       const [s, e2] = (props.standardRange || "A:A").split(':').map(colLetterToIndex);
-      for (let j = s; j <= e2; j++) {
-        const kA = ansKeyRow[j], sA = row[j];
-        if (String(kA).trim() !== "" && String(sA).trim() !== "") {
-          if (isCorrect(sA, kA)) totalC++; else totalW++;
-        }
-      }
-      totalScore = (totalC * posMark) - (totalW * negMark);
+      for (let j = s; j <= e2; j++) qCols.add(j);
     }
 
-    const fullMarksPossible = totalQCount * posMark;
-    const isPassed = !subFail && totalScore >= (fullMarksPossible * globalPassPct / 100);
-    if (isPassed) passCount++;
-    if (totalScore > highScore) highScore = totalScore;
-    totalScoreSum += totalScore;
+    // FIXED (v72): header row এখন শুধু প্রথম কয়েক row-এর মধ্যেই খোঁজা হয় —
+    // পুরো শীট স্ক্যান করলে কোনো ছাত্রের উত্তরে ভুলবশত "name/full/নাম" শব্দ
+    // থাকলে ভুল row-কে header ধরে নেওয়ার ঝুঁকি ছিল।
+    const titleRowIdx = findHeaderRowIdx(rawData);
+    if (titleRowIdx === -1) { console.error("Header row not found!"); return; }
+    const titleRow = rawData[titleRowIdx];
 
-    const phoneDisplay = phone.length >= 3 ? "********" + phone.slice(-3) : phone;
-    students.push({
-      name, phone,
-      district:     dCol !== -1 ? String(row[dCol] || "N/A").trim() : "N/A",
-      phoneDisplay,
-      subData:      subDataForTable,
-      totalC, totalW,
-      score:        totalScore,
-      passed:       isPassed
+    let nCol = -1, dCol = -1, wCol = -1;
+    titleRow.forEach((h, j) => {
+      if (qCols.has(j)) return;
+      const head = String(h).toLowerCase();
+      if      (/নাম|name|student/i.test(head))             nCol = j;
+      else if (/জেলা|district|college|বিভাগ/i.test(head)) dCol = j;
+      else if (/whatsapp|phone|মোবাইল|contact/i.test(head))wCol = j;
     });
+
+    if (nCol === -1 || wCol === -1) {
+      try { SpreadsheetApp.getUi().alert("নাম বা WhatsApp কলাম খুঁজে পাওয়া যায়নি।"); } catch(x){}
+      return;
+    }
+
+    const ansKeyRow   = rawData[ansKeyRowIdx];
+    const ansKeyName  = String(ansKeyRow[nCol] || "").trim();
+    const totalQCount = qCols.size;
+
+    // NEW (v72): Answer Key row বদলে গেছে কিনা যাচাই — শীট ম্যানুয়ালি
+    // সর্ট/এডিট হলে (সাধারণ একটা ভুল) ansKeyRow-এর ফিক্সড row-নাম্বারে এখন
+    // ভিন্ন কেউ চলে আসতে পারে, যা silently পুরো স্কোরিং ভুল করে দেয়।
+    // এখন অন্তত টোস্ট দিয়ে সতর্ক করা হয়, চুপচাপ ভুল হিসাব করে না।
+    const savedAnsKeyName = props.savedAnsKeyName;
+    if (savedAnsKeyName && savedAnsKeyName !== ansKeyName) {
+      console.error(`⚠️ Answer Key row (row ${ansKeyRowIdx+1}) এর নাম বদলে গেছে! আগে: "${savedAnsKeyName}", এখন: "${ansKeyName}". শীট সর্ট/এডিট হয়ে থাকতে পারে — Setup Wizard-এ Answer Key Row নম্বর যাচাই করুন!`);
+      try { ss.toast('⚠️ সতর্কতা: Answer Key row বদলে গেছে বলে মনে হচ্ছে! Row নম্বর যাচাই করুন, নয়তো স্কোরিং ভুল হতে পারে।', '⚠️ DreamRise', 10); } catch(x){}
+    } else if (!savedAnsKeyName) {
+      try { PropertiesService.getScriptProperties().setProperty('savedAnsKeyName', ansKeyName); } catch(x){}
+    }
+
+    let students = [], seen = new Set();
+    let passCount = 0, highScore = -Infinity, totalScoreSum = 0;
+
+    for (let i = 0; i < rawData.length; i++) {
+      if (i === titleRowIdx || i === ansKeyRowIdx) continue;
+      const row  = rawData[i];
+      const name = String(row[nCol] || "").trim();
+      // FIXED (v72): normalizePhone() — dedupe আর সার্চ এখন একই normalize
+      // ব্যবহার করে (আগে এখানে পুরো digit-string দিয়ে dedupe হতো, সার্চ
+      // পাথ শেষ ১০ ডিজিট দিয়ে — mismatch হতো)।
+      const rawDigits = String(row[wCol] || "").trim().replace(/\D/g, '');
+      if (!name || rawDigits.length < 7) continue;
+      const phone = normalizePhone(rawDigits);
+      if (name === ansKeyName) continue;      // answer key row বাদ
+      if (seen.has(phone)) continue;           // duplicate বাদ
+      seen.add(phone);
+
+      let totalC = 0, totalW = 0, totalScore = 0, subFail = false, subDataForTable = [];
+
+      if (isSubWise) {
+        subjects.forEach(sub => {
+          const [s, e2] = sub.range.split(':').map(colLetterToIndex);
+          let c = 0, w = 0;
+          for (let j = s; j <= e2; j++) {
+            const kA = ansKeyRow[j], sA = row[j];
+            if (String(kA).trim() !== "") {
+              if (String(sA).trim() !== "") {
+                if (isCorrect(sA, kA)) c++; else w++;
+              }
+            }
+          }
+          const score      = (c * posMark) - (w * negMark);
+          const subPassMark= parseFloat(sub.pass) || 0;
+          if (score < subPassMark) subFail = true;
+          totalC += c; totalW += w; totalScore += score;
+          subDataForTable.push(c, w, score.toFixed(2));
+        });
+      } else {
+        const [s, e2] = (props.standardRange || "A:A").split(':').map(colLetterToIndex);
+        for (let j = s; j <= e2; j++) {
+          const kA = ansKeyRow[j], sA = row[j];
+          if (String(kA).trim() !== "" && String(sA).trim() !== "") {
+            if (isCorrect(sA, kA)) totalC++; else totalW++;
+          }
+        }
+        totalScore = (totalC * posMark) - (totalW * negMark);
+      }
+
+      const fullMarksPossible = totalQCount * posMark;
+      const isPassed = !subFail && totalScore >= (fullMarksPossible * globalPassPct / 100);
+      if (isPassed) passCount++;
+      if (totalScore > highScore) highScore = totalScore;
+      totalScoreSum += totalScore;
+
+      const phoneDisplay = phone.length >= 3 ? "********" + phone.slice(-3) : phone;
+      students.push({
+        name, phone,
+        district:     dCol !== -1 ? String(row[dCol] || "N/A").trim() : "N/A",
+        phoneDisplay,
+        subData:      subDataForTable,
+        totalC, totalW,
+        score:        totalScore,
+        passed:       isPassed
+      });
+    }
+
+    if (students.length === 0) {
+      try { ss.toast('⚠️ কোনো valid student পাওয়া যায়নি!', 'DreamRise', 5); } catch(x){}
+      return;
+    }
+    if (highScore === -Infinity) highScore = 0;
+
+    // Sort: pass > fail, then score desc, then wrong asc (tie-breaker)
+    students.sort((a, b) => {
+      if (a.passed !== b.passed) return a.passed ? -1 : 1;
+      if (b.score  !== a.score)  return b.score - a.score;
+      return a.totalW - b.totalW;
+    });
+
+    const fullMarks     = (totalQCount * posMark).toFixed(2);
+    const passThreshold = (totalQCount * posMark * globalPassPct / 100).toFixed(2);
+    const meta = {
+      examName:      props.examName,
+      totalQ:        totalQCount,
+      fullMarks,
+      passPercent:   globalPassPct,
+      passThreshold,
+      examinees:     students.length,
+      passCount,
+      failCount:     students.length - passCount,
+      avg:           students.length > 0 ? (totalScoreSum / students.length).toFixed(2) : "0",
+      highScore:     highScore.toFixed(2),
+      negMark, posMark,
+      isSubjectWise: isSubWise,
+      subjects
+    };
+
+    renderRankingPage(students, props, subjects, meta);
+    renderPdfReport(students, props, subjects, meta);
+
+    // Meta → ScriptProperties (permanent fallback, কখনো এক্সপায়ার হয় না)
+    try {
+      PropertiesService.getScriptProperties().setProperty('lastMeta', JSON.stringify(meta));
+      PropertiesService.getScriptProperties().setProperty('lastSyncTime', Date.now().toString());
+    } catch(x){}
+
+    // ════════════════════════════════════════════════════════════════
+    // PERMANENT DATA STORAGE
+    // ════════════════════════════════════════════════════════════════
+    try {
+      const cacheStudents = students.map(s => [
+        s.name, s.district, s.phone, s.totalC, s.totalW, s.score, s.passed ? 1 : 0, s.subData
+      ]);
+      const payload = { s: cacheStudents, m: meta, t: Date.now() };
+      const payloadJson = JSON.stringify(payload);
+
+      // 1) Fast cache (best-effort, ৬ ঘণ্টা)
+      try { CacheService.getScriptCache().put('rankDataMin', payloadJson, 21600); } catch(x){}
+
+      // 2) Permanent backup sheet (কখনো এক্সপায়ার হয় না — মূল উৎস)
+      saveBackupSheet(payloadJson);
+
+    } catch(x) { console.error("Data persist failed:", x); }
+
+    try { ss.toast(`✅ সম্পন্ন! ${students.length} জন | পাস: ${passCount}`, 'DreamRise System', 5); } catch(x){}
+
+  } finally {
+    if (gotLock) { try { lock.releaseLock(); } catch(x){} }
   }
-
-  if (students.length === 0) {
-    try { ss.toast('⚠️ কোনো valid student পাওয়া যায়নি!', 'DreamRise', 5); } catch(x){}
-    return;
-  }
-  if (highScore === -Infinity) highScore = 0;
-
-  // Sort: pass > fail, then score desc, then wrong asc (tie-breaker)
-  students.sort((a, b) => {
-    if (a.passed !== b.passed) return a.passed ? -1 : 1;
-    if (b.score  !== a.score)  return b.score - a.score;
-    return a.totalW - b.totalW;
-  });
-
-  const fullMarks     = (totalQCount * posMark).toFixed(2);
-  const passThreshold = (totalQCount * posMark * globalPassPct / 100).toFixed(2);
-  const meta = {
-    examName:      props.examName,
-    totalQ:        totalQCount,
-    fullMarks,
-    passPercent:   globalPassPct,
-    passThreshold,
-    examinees:     students.length,
-    passCount,
-    failCount:     students.length - passCount,
-    avg:           students.length > 0 ? (totalScoreSum / students.length).toFixed(2) : "0",
-    highScore:     highScore.toFixed(2),
-    negMark, posMark,
-    isSubjectWise: isSubWise,
-    subjects
-  };
-
-  renderRankingPage(students, props, subjects, meta);
-  renderPdfReport(students, props, subjects, meta);
-
-  // Meta → ScriptProperties (permanent fallback, কখনো এক্সপায়ার হয় না)
-  try {
-    PropertiesService.getScriptProperties().setProperty('lastMeta', JSON.stringify(meta));
-    PropertiesService.getScriptProperties().setProperty('lastSyncTime', Date.now().toString());
-  } catch(x){}
-
-  // ════════════════════════════════════════════════════════════════
-  // PERMANENT DATA STORAGE — মূল বাগ ফিক্স
-  // ────────────────────────────────────────────────────────────────
-  // আগে এই ডেটা শুধু CacheService তে থাকতো যা ৬ ঘণ্টা পর মুছে যেত,
-  // ফলে কয়েক ঘণ্টা পর কেউ ফোন নম্বর দিয়ে খুঁজলে রেজাল্ট পেতো না।
-  // এখন একটি hidden "DR_Backup" শীটে এই ডেটা স্থায়ীভাবে রাখা হয়,
-  // যা কখনো এক্সপায়ার হবে না (Manual Sync না করা পর্যন্ত থাকবে)।
-  // CacheService এখনো ব্যবহার করা হয় শুধু speed বাড়ানোর জন্য —
-  // কিন্তু সেটা miss/expire হলে সরাসরি DR_Backup শীট থেকে পড়া হবে,
-  // ভঙ্গুর "Ranking Page" column-guessing fallback আর নেই।
-  // ════════════════════════════════════════════════════════════════
-  try {
-    const cacheStudents = students.map(s => [
-      s.name, s.district, s.phone, s.totalC, s.totalW, s.score, s.passed ? 1 : 0, s.subData
-    ]);
-    const payload = { s: cacheStudents, m: meta, t: Date.now() };
-    const payloadJson = JSON.stringify(payload);
-
-    // 1) Fast cache (best-effort, ৬ ঘণ্টা)
-    try { CacheService.getScriptCache().put('rankDataMin', payloadJson, 21600); } catch(x){}
-
-    // 2) Permanent backup sheet (কখনো এক্সপায়ার হয় না — মূল উৎস)
-    saveBackupSheet(payloadJson);
-
-  } catch(x) { console.error("Data persist failed:", x); }
-
-  try { ss.toast(`✅ সম্পন্ন! ${students.length} জন | পাস: ${passCount}`, 'DreamRise System', 5); } catch(x){}
 }
 
 /**
@@ -459,20 +547,6 @@ function getStudentDataPayload() {
 }
 
 // ===================== AUTO-SYNC ON PORTAL SEARCH =====================
-/**
- * FIXED (v71): আগে এই ফাংশন Portal সার্চের সময় ডেটা পুরনো (stale) হলে
- * সরাসরি ভারী calculateAndRank() (পুরো re-rank + Ranking Page + PDF Report
- * পুনর্নির্মাণ + লোগো ফেচ) চালিয়ে দিত এবং search request সেটা শেষ না হওয়া
- * পর্যন্ত ব্লক হয়ে থাকত — অনেক সময় লেগে যেত বা টাইমআউট হয়ে যেত, ফলে
- * ব্যবহারকারী কোনো error ছাড়াই অনন্তকাল "Loading..." দেখতে থাকত।
- *
- * এখন এই ফাংশন কখনো ব্লক করে না — শুধু একটি হালকা background trigger
- * শিডিউল করে (কয়েক সেকেন্ড পরে চলবে), search request নিজে তৎক্ষণাৎ ফিরে
- * আসে। প্রকৃত sync হয় মূলত ফর্ম সাবমিটের সাথে সাথেই (onFormSubmit
- * trigger), এবং কোনো কারণে সেটা মিস হলে searchStudent() নিজে থেকেই
- * নির্দিষ্ট স্টুডেন্টের রেজাল্ট খুঁজে হিসাব করে নেয় (দেখুন
- * computeSingleStudentAndMerge)।
- */
 function ensureFreshDataForPortal() {
   try {
     const lastSync = parseInt(PropertiesService.getScriptProperties().getProperty('lastSyncTime')) || 0;
@@ -483,12 +557,6 @@ function ensureFreshDataForPortal() {
   }
 }
 
-/**
- * একটি non-blocking, "fire-and-forget" ফুল sync শিডিউল করে (৫ সেকেন্ড পরে
- * চলবে)। ইতিমধ্যে একটি pending sync trigger থাকলে নতুন করে আর বসানো হয় না
- * (duplicate trigger এড়ানোর জন্য)। এই ফাংশন সবসময় সাথে সাথেই রিটার্ন করে,
- * কখনো কাউকে অপেক্ষা করায় না।
- */
 function scheduleBackgroundSync() {
   try {
     const already = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'runDebouncedRank');
@@ -543,8 +611,6 @@ function renderRankingPage(students, props, subjects, meta) {
     .setHorizontalAlignment("center")
     .setBorder(true,true,true,true,true,true,"#cbd5e1",SpreadsheetApp.BorderStyle.SOLID)
     .setFontFamily("Anek Bangla");
-  // ❌ কোনো .setNote() নেই — JSON প্রিন্টে আসবে না
-  // ❌ কোনো hidden cell নেই — সম্পূর্ণ পরিষ্কার
 
   // ── Row 4: Headers ──
   sheet.getRange(4,1,1,COL).setValues([headers])
@@ -564,12 +630,8 @@ function renderRankingPage(students, props, subjects, meta) {
     range.setValues(tableData)
       .setHorizontalAlignment("center").setVerticalAlignment("middle").setFontFamily("Anek Bangla");
 
-    // ─── Colors ───
-    // Top 3 Pass: সবুজ (#dcfce7 / #166534)
-    // Fail:       লাল   (#fee2e2 / #991b1b)
-    // Others:     zebra  সাদা / হালকা ধূসর
     let bgColors = [], txtColors = [];
-    let passIdx = 0; // pass করা student এর মধ্যে top 3 গণনা
+    let passIdx = 0;
     tableData.forEach((row, i) => {
       const isFail = row[COL-1] === "FAIL";
       if (isFail) {
@@ -577,11 +639,9 @@ function renderRankingPage(students, props, subjects, meta) {
         txtColors.push(Array(COL).fill("#991b1b"));
       } else {
         if (passIdx < 3) {
-          // TOP 3 PASS → সবুজ
           bgColors.push(Array(COL).fill("#dcfce7"));
           txtColors.push(Array(COL).fill("#166534"));
         } else {
-          // বাকি সব → zebra (সাদা / হালকা ধূসর)
           bgColors.push(Array(COL).fill(passIdx % 2 === 0 ? "#ffffff" : "#f8fafc"));
           txtColors.push(Array(COL).fill("#1e293b"));
         }
@@ -590,9 +650,7 @@ function renderRankingPage(students, props, subjects, meta) {
     });
     range.setBackgrounds(bgColors).setFontColors(txtColors);
 
-    // Rank column Bold
     sheet.getRange(5,1,tableData.length,1).setFontWeight("bold");
-    // Name column left-align
     sheet.getRange(5,2,tableData.length,1).setHorizontalAlignment("left");
   }
 
@@ -622,7 +680,6 @@ function renderRankingPage(students, props, subjects, meta) {
   sheet.setFrozenRows(4);
   [45,210,100,105].forEach((w,i) => sheet.setColumnWidth(i+1, w));
 
-  // ════ PRINT AREA — meta column নেই, শুধু A থেকে শেষ data column ════
   const lastColLetter = colIndexToLetter(COL);
   const totalRows     = lastDataRow + 3;
   try {
@@ -666,7 +723,6 @@ function renderPdfReport(students, props, subjects, meta) {
     .setHorizontalAlignment("center")
     .setBorder(true,true,true,true,true,true,"#cbd5e1",SpreadsheetApp.BorderStyle.SOLID)
     .setFontFamily("Anek Bangla");
-  // ❌ কোনো .setNote() নেই
 
   sheet.getRange(4,1,1,COL)
     .setValues([["Rank","Student Name","District","WhatsApp","Total C","Total W","Score","Result"]])
@@ -696,7 +752,6 @@ function renderPdfReport(students, props, subjects, meta) {
                      "#000000","#000000","#000000", txtResult]);
     rowPtr++;
 
-    // Subject detail row (isSubjectWise)
     if (props.isSubjectWise === "true" && s.subData.length > 0) {
       let parts = [];
       subjects.forEach((sub, sIdx) => {
@@ -750,11 +805,8 @@ function renderPdfReport(students, props, subjects, meta) {
 
 // ===================== WEB APP: GET EXAM INFO =====================
 function getExamInfo() {
-  // পোর্টাল লোড হওয়ার সাথেই ডেটা স্টেইল থাকলে ব্যাকগ্রাউন্ডে (non-blocking)
-  // sync শিডিউল করো, যাতে summary bar-ও সবসময় সাম্প্রতিক তথ্য দেখায়।
   ensureFreshDataForPortal();
   try {
-    // 1. ScriptProperties (permanent, কখনো এক্সপায়ার হয় না) — primary source
     const lastMeta = PropertiesService.getScriptProperties().getProperty('lastMeta');
     if (lastMeta) {
       const meta = JSON.parse(lastMeta);
@@ -763,7 +815,6 @@ function getExamInfo() {
       meta.logoLightUrl = DR_LOGO_LIGHT_URL;
       return meta;
     }
-    // 2. Cache fallback (সাধারণত দরকার হবে না, কিন্তু রেখে দেওয়া হলো)
     const cached = CacheService.getScriptCache().get('rankDataMin');
     if (cached) {
       const meta = Object.assign({}, JSON.parse(cached).m);
@@ -772,7 +823,6 @@ function getExamInfo() {
       meta.logoLightUrl = DR_LOGO_LIGHT_URL;
       return meta;
     }
-    // 3. Fallback
     return { examName: SpreadsheetApp.getActiveSpreadsheet().getName(), logoUrl: DR_LOGO_DARK_URL, logoLightUrl: DR_LOGO_LIGHT_URL };
   } catch(e) {
     return { examName: SpreadsheetApp.getActiveSpreadsheet().getName(), logoUrl: DR_LOGO_DARK_URL, logoLightUrl: DR_LOGO_LIGHT_URL };
@@ -780,38 +830,16 @@ function getExamInfo() {
 }
 
 // ===================== WEB APP: SEARCH STUDENT =====================
-/**
- * FIXED (v71): সার্চ এখন আর কখনো ভারী পূর্ণাঙ্গ calculateAndRank()-এর জন্য
- * অপেক্ষা করে না (আগের ব্লকিং বাগ, যেখানে নতুন স্টুডেন্ট সার্চ করলে কোনো
- * error ছাড়াই অনন্তকাল Loading থেকে যেত)।
- *
- * নতুন ধাপ:
- *  1) প্রথমে বিদ্যমান প্রস্তুত ডেটাতে (Cache → Backup Sheet) খোঁজা হয় —
- *     পাওয়া গেলে সাথে সাথেই রেজাল্ট দেখানো হয় (দ্রুততম পথ)।
- *  2) না পাওয়া গেলে (যেমন: ফর্ম সাবমিট হয়েছে কিন্তু এখনো পূর্ণ sync হয়নি)
- *     — শুধু এই একজন স্টুডেন্টের জন্য "Form Responses" সোর্স শীট থেকে
- *     তার সারি খুঁজে বের করে শুধু তার হিসাব (correct/wrong/score) করা হয়,
- *     বিদ্যমান ডেটার সাথে merge করে rank বসিয়ে সাথে সাথেই ফেরত দেওয়া হয়।
- *     পুরো re-sync না করায় এটা অনেক দ্রুত।
- *  3) এরপর ব্যাকগ্রাউন্ডে একটি সম্পূর্ণ sync শিডিউল হয়ে যায় (non-blocking),
- *     যাতে Ranking Page/PDF Report ইত্যাদিও শীঘ্রই সম্পূর্ণ আপডেট হয়।
- *  4) সোর্স শীটেও না পাওয়া গেলে তখনই "নম্বর পাওয়া যায়নি" দেখানো হয়।
- *
- * নেগেটিভ মার্কের কারণে স্কোর ঋণাত্মক (negative) হলেও তাদের রেজাল্ট
- * স্বাভাবিকভাবেই দেখানো হয় — কোথাও স্কোরের sign অনুযায়ী কোনো filtering
- * নেই।
- */
 function searchStudent(phone) {
   try {
-    const searchPhone = phone.replace(/\D/g,'').slice(-10);
+    // FIXED (v72): normalizePhone() ব্যবহার — dedupe-এর সাথে অভিন্ন লজিক
+    const searchPhone = normalizePhone(phone);
     if (searchPhone.length < 7) return { error: "সঠিক ফোন নম্বর দিন!" };
 
-    // ডেটা পুরনো হলে ব্যাকগ্রাউন্ডে (non-blocking) সম্পূর্ণ sync শিডিউল করো
     ensureFreshDataForPortal();
 
     let payload = getStudentDataPayload();
 
-    // 1) প্রস্তুত ডেটাতে খোঁজো — দ্রুততম পথ
     if (payload) {
       const result = findStudentInMinifiedCache(payload, searchPhone);
       if (result) {
@@ -822,7 +850,6 @@ function searchStudent(phone) {
       }
     }
 
-    // 2) প্রস্তুত ডেটাতে না থাকলে — শুধু এই স্টুডেন্টের জন্য টার্গেটেড হিসাব
     const singleResult = computeSingleStudentAndMerge(searchPhone, payload);
     if (singleResult) {
       singleResult.meta.summaryText  = buildSummaryText(singleResult.meta);
@@ -831,7 +858,6 @@ function searchStudent(phone) {
       return singleResult;
     }
 
-    // 3) কোথাও পাওয়া যায়নি
     if (!payload) return { error: "⚠️ 'Manual Sync Ranking' চালু করুন!" };
     return { error: "❌ আপনার নম্বর পাওয়া যায়নি!" };
   } catch(e) {
@@ -840,19 +866,14 @@ function searchStudent(phone) {
 }
 
 /**
- * শুধু একজন স্টুডেন্টের জন্য টার্গেটেড হিসাব:
- *  - Source sheet-এ ফোন নম্বর দিয়ে তার সারি খুঁজে বের করে
- *  - configuration (posMark/negMark/ansKeyRow/subjects) অনুযায়ী তার
- *    correct/wrong/score হিসাব করে (calculateAndRank()-এর মতোই লজিক)
- *  - বিদ্যমান payload (যদি থাকে)-এর সাথে merge করে rank ও meta আপডেট করে
- *  - LockService দিয়ে race-condition এড়িয়ে ফলাফল Cache+Backup-এ সেভ করে,
- *    যাতে পরের সার্চে এটা সরাসরি ফাস্ট পাথ থেকেই পাওয়া যায়
- *  - শেষে একটি ব্যাকগ্রাউন্ড ফুল-sync শিডিউল করে দেয়, যাতে Ranking
- *    Page/PDF Report ইত্যাদিও শীঘ্রই authoritative ভাবে আপডেট হয়
- *
- * পাওয়া না গেলে null রিটার্ন করে।
+ * FIXED (v72): lost-update race ফিক্স — আগে এই ফাংশন caller থেকে পাঠানো
+ * (lock নেওয়ার আগে পড়া) payload-কে merge-এর ভিত্তি হিসেবে ব্যবহার করত।
+ * দুইজন স্টুডেন্ট প্রায় একই সময়ে সার্চ করলে দুইজনেই একই পুরনো payload
+ * পড়ত, তারপর যে পরে lock পেত সে তার merge পুরনো payload-এর উপর ভিত্তি
+ * করে সেভ করত — ফলে প্রথমজনের merge করা এন্ট্রি হারিয়ে যেত।
+ * এখন lock পাওয়ার পরে payload আবার freshly পড়া হয়, তারপরই merge হয়।
  */
-function computeSingleStudentAndMerge(searchPhone, payload) {
+function computeSingleStudentAndMerge(searchPhone, payloadHint) {
   const lock = LockService.getScriptLock();
   let gotLock = false;
   try {
@@ -881,7 +902,7 @@ function computeSingleStudentAndMerge(searchPhone, payload) {
       for (let j = s; j <= e2; j++) qCols.add(j);
     }
 
-    const titleRowIdx = rawData.findIndex(row => /name|full|নাম/i.test(row.join(" ")));
+    const titleRowIdx = findHeaderRowIdx(rawData);
     if (titleRowIdx === -1) return null;
     const titleRow = rawData[titleRowIdx];
 
@@ -904,14 +925,13 @@ function computeSingleStudentAndMerge(searchPhone, payload) {
       if (i === titleRowIdx || i === ansKeyRowIdx) continue;
       const row  = rawData[i];
       const name = String(row[nCol] || "").trim();
-      const phoneDigits = String(row[wCol] || "").trim().replace(/\D/g, '');
+      const phoneDigits = normalizePhone(row[wCol]);
       if (!name || phoneDigits.length < 7) continue;
       if (name === ansKeyName) continue;
-      if (phoneDigits.endsWith(searchPhone)) { matchRow = row; break; }
+      if (phoneDigits === searchPhone) { matchRow = row; break; }
     }
     if (!matchRow) return null; // সোর্স শীটেও নেই
 
-    // এই একজনের correct/wrong/score হিসাব (calculateAndRank()-এর সাথে অভিন্ন লজিক)
     let totalC = 0, totalW = 0, totalScore = 0, subFail = false, subDataForTable = [];
     if (isSubWise) {
       subjects.forEach(sub => {
@@ -944,16 +964,17 @@ function computeSingleStudentAndMerge(searchPhone, payload) {
     const fullMarksPossible = totalQCount * posMark;
     const isPassed = !subFail && totalScore >= (fullMarksPossible * globalPassPct / 100);
     const name    = String(matchRow[nCol]).trim();
-    const phone   = String(matchRow[wCol]).trim().replace(/\D/g, '');
+    const phone   = normalizePhone(matchRow[wCol]);
     const district = dCol !== -1 ? String(matchRow[dCol] || "N/A").trim() : "N/A";
 
-    // বিদ্যমান students লিস্টের সাথে merge করো (নেগেটিভ স্কোর হলেও যোগ হবে,
-    // কোনো sign-ভিত্তিক filtering নেই)
-    let students = payload ? payload.s.slice() : [];
-    students = students.filter(s => String(s[2]) !== phone); // safety dedupe
+    // Lock নাও — এরপরই payload freshly পড়ো, merge করো, তারপর save করো।
+    gotLock = lock.tryLock(DR_LOCK_WAIT_MS);
+    const freshPayload = gotLock ? (getStudentDataPayload() || payloadHint) : payloadHint;
+
+    let students = freshPayload ? freshPayload.s.slice() : [];
+    students = students.filter(s => normalizePhone(s[2]) !== phone); // safety dedupe
     students.push([name, district, phone, totalC, totalW, totalScore, isPassed ? 1 : 0, subDataForTable]);
 
-    // পুনরায় sort: pass > fail, score desc, wrong asc
     students.sort((a, b) => {
       const aPass = a[6] === 1, bPass = b[6] === 1;
       if (aPass !== bPass) return aPass ? -1 : 1;
@@ -961,7 +982,6 @@ function computeSingleStudentAndMerge(searchPhone, payload) {
       return a[4] - b[4];
     });
 
-    // Meta পুনর্গণনা
     let passCount = 0, highScore = -Infinity, sum = 0;
     students.forEach(s => {
       if (s[6] === 1) passCount++;
@@ -969,7 +989,7 @@ function computeSingleStudentAndMerge(searchPhone, payload) {
       sum += s[5];
     });
 
-    const baseMeta = payload ? Object.assign({}, payload.m) : {
+    const baseMeta = freshPayload ? Object.assign({}, freshPayload.m) : {
       examName:      props.examName,
       totalQ:        totalQCount,
       fullMarks:     fullMarksPossible.toFixed(2),
@@ -987,9 +1007,6 @@ function computeSingleStudentAndMerge(searchPhone, payload) {
 
     const newPayload = { s: students, m: baseMeta, t: Date.now() };
 
-    // Lock নিয়ে persist করো — না পেলেও রেজাল্ট দেখানো বন্ধ হবে না,
-    // শুধু এবারের মতো save না-ও হতে পারে (পরের ফুল sync-এ ঠিক হয়ে যাবে)
-    gotLock = lock.tryLock(DR_LOCK_WAIT_MS);
     if (gotLock) {
       try {
         const json = JSON.stringify(newPayload);
@@ -999,8 +1016,6 @@ function computeSingleStudentAndMerge(searchPhone, payload) {
       } catch(x) { console.error("computeSingleStudentAndMerge persist failed:", x); }
     }
 
-    // এই merge সাময়িক — শীঘ্রই একটি প্রকৃত পূর্ণাঙ্গ sync (Ranking Page/PDF
-    // Report সহ) ব্যাকগ্রাউন্ডে চালিয়ে সব authoritative করে ফেলা হবে
     scheduleBackgroundSync();
 
     return findStudentInMinifiedCache(newPayload, searchPhone);
@@ -1018,7 +1033,8 @@ function findStudentInMinifiedCache(cacheObj, searchPhone) {
   const examinees = students.length;
   for (let i = 0; i < students.length; i++) {
     const s = students[i]; // [name,district,phone,totalC,totalW,score,passFlag,subData]
-    if (!String(s[2]||"").replace(/\D/g,'').endsWith(searchPhone)) continue;
+    // FIXED (v72): normalizePhone() দিয়ে তুলনা — dedupe-এর সাথে অভিন্ন লজিক
+    if (normalizePhone(s[2]) !== searchPhone) continue;
     const rank = i+1;
     let subjects = [];
     if (s[7] && s[7].length > 0) {
@@ -1044,19 +1060,7 @@ function findStudentInMinifiedCache(cacheObj, searchPhone) {
 }
 
 /**
- * DreamRise v68 — showStatisticsDialog() FINAL
- * ─────────────────────────────────────────────
- * পুরনো function টি সম্পূর্ণ মুছে এটি দিয়ে replace করুন।
- * বাকি সব v68 code হুবহু একই থাকবে।
- *
- * নতুন features:
- *  ✅ Color legend — কোন রঙ কী বোঝায় স্পষ্ট
- *  ✅ Band labels বারের বাইরে — ভেতরে ঢোকে না
- *  ✅ Fail/Pass/Borderline — ৩ রঙ পরিষ্কার অর্থ সহ
- *  ✅ Print / PDF বাটন → browser print dialog
- *  ✅ Subject chart — legend সহ
- *  ✅ @media print CSS — clean printable layout
- *  ✅ FIXED: এখন permanent ডেটা সোর্স থেকে পড়ে (cache miss এর সমস্যা নেই)
+ * showStatisticsDialog() — অপরিবর্তিত (v68 থেকে)
  */
 function showStatisticsDialog() {
   try {
@@ -1068,7 +1072,6 @@ function showStatisticsDialog() {
     const passRate   = meta.examinees > 0 ? ((meta.passCount / meta.examinees) * 100).toFixed(1) : "0";
     const failRate   = (100 - parseFloat(passRate)).toFixed(1);
 
-    // Score buckets (10 buckets, each 10% of fullM)
     const buckets = Array(10).fill(0);
     let lowestScore = Infinity;
     students.forEach(s => {
@@ -1080,11 +1083,9 @@ function showStatisticsDialog() {
     });
     if (lowestScore === Infinity) lowestScore = 0;
 
-    // Pass threshold index in 10-bucket array
     const passThreshPct = parseFloat(meta.passPercent) || 45;
     const passBucketIdx = Math.floor(passThreshPct / 10);
 
-    // Band data from buckets
     const bandDefs = [
       { label: '90–100%',   rangeStr: '(90+ নিশ্চিত ভালো করবে! ইনশাআল্লাহ।)',    bg:'#1d9e75', tc:'#04342c', buckets:[9]     },
       { label: '80–90%',    rangeStr: '(80+ ভালো করবে! ইনশাআল্লাহ।)', bg:'#5dcaa5', tc:'#085041', buckets:[8]     },
@@ -1096,12 +1097,10 @@ function showStatisticsDialog() {
     const bandCounts = bandDefs.map(b => b.buckets.reduce((a, i) => a + buckets[i], 0));
     const totalEx    = meta.examinees || 48;
 
-    // Bar colors for distribution chart
     const barColorsArr = buckets.map((_, i) =>
       i < passBucketIdx ? '#f09595' : i === passBucketIdx ? '#EF9F27' : '#5DCAA5'
     );
 
-    // Subject data
     const subjects   = meta.subjects || [];
     const colToNum   = c => { let n=0; c=String(c).toUpperCase().replace(/[^A-Z]/g,''); for(let i=0;i<c.length;i++) n=n*26+(c.charCodeAt(i)-64); return n; };
     const subNames   = subjects.map(s => s.name);
@@ -1112,7 +1111,6 @@ function showStatisticsDialog() {
       return colToNum(parts[1]) - colToNum(parts[0]) + 1;
     });
 
-    // Build band rows HTML
     let bandRowsHtml = '';
     bandDefs.forEach((b, i) => {
       const count = bandCounts[i];
@@ -1147,11 +1145,9 @@ function showStatisticsDialog() {
 <link href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   *, body { box-sizing:border-box; margin:0; padding:0; font-family:'Anek Bangla','Segoe UI',Arial,sans-serif; }
-  {box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Segoe UI',Arial,sans-serif;background:#f8fafc;color:#1e293b;font-size:13px;padding:0}
   .topbar{background:#1e3a8a;padding:13px 18px;display:flex;align-items:center;gap:10px}
   .topbar img.logo{height:30px;width:auto;flex-shrink:0;border-radius:4px}
-  .dr-badge{background:rgba(255,255,255,.18);color:#c7d7fb;font-size:10px;font-weight:600;padding:3px 9px;border-radius:5px;letter-spacing:.04em;flex-shrink:0}
   .exam-name{font-size:14px;font-weight:600;color:#fff;flex:1}
   .exam-sub{font-size:10px;color:#93c5fd;margin-top:2px}
   .summary-bar{background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:8px 14px;font-size:11px;color:#3730a3;text-align:center;font-weight:600;margin-bottom:12px}
@@ -1367,31 +1363,18 @@ function doGet(e) {
 }
 
 // ===================== PRINT FUNCTIONS =====================
-/**
- * Print URL parameters ব্যাখ্যা:
- *   notes=false       → cell notes প্রিন্টে আসবে না (JSON block করে)
- *   sheetnames=false  → sheet tab name আসবে না
- *   printtitle=false  → spreadsheet title আসবে না
- *   pagenumbers=true  → page number আসবে
- *   fitw=true         → width-fit (সব column এক পাতায়)
- *   fith=false        → height-fit বন্ধ (multi-page কাজ করবে ✅)
- *
- *   ⚠️ fith=true দিলে সব row এক পাতায় চাপিয়ে ফেলে → multi-page ভাঙে
- *      তাই fith একদম নেই (default false)
- */
 function _buildPrintUrl(sheet, portrait) {
   const ss      = SpreadsheetApp.getActiveSpreadsheet();
   const baseUrl = ss.getUrl().replace(/\/edit(\?.*)?$/, '');
   return baseUrl + '/export?format=pdf' +
     '&size=A4' +
     '&portrait=' + (portrait ? 'true' : 'false') +
-    '&fitw=true' +   // width ফিট
-    // fith ইচ্ছাকৃতভাবে নেই → multi-page কাজ করে
+    '&fitw=true' +
     '&gridlines=false' +
-    '&notes=false' +       // ✅ JSON note বন্ধ
-    '&sheetnames=false' +  // ✅ sheet নাম বন্ধ
-    '&printtitle=false' +  // ✅ spreadsheet title বন্ধ
-    '&pagenumbers=true' +  // ✅ page number
+    '&notes=false' +
+    '&sheetnames=false' +
+    '&printtitle=false' +
+    '&pagenumbers=true' +
     '&gid=' + sheet.getSheetId();
 }
 
