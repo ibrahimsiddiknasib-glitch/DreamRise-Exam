@@ -24,12 +24,26 @@ if %errorlevel% neq 0 (
     call npm install -g @google/clasp
 )
 
-:: 3. Setup Configuration
+:: 3. Setup Configuration & Script ID Management
 set CONFIG_FILE=dreamrise_config.txt
 
 if exist "%CONFIG_FILE%" (
-    echo [+] Configuration loaded automatically!
     for /f "usebackq delims=" %%x in ("%CONFIG_FILE%") do (set "%%x")
+    echo [+] Saved Configuration Loaded:
+    echo     Project Path : !PROJECT_PATH!
+    echo     Script ID    : !SCRIPT_ID!
+    echo ---------------------------------------------------
+    
+    set "changeScript=N"
+    set /p changeScript="Do you want to enter a NEW Script ID? [Y/N, Default: N]: "
+    
+    if /i "!changeScript!"=="Y" (
+        echo.
+        set /p SCRIPT_ID="Enter New Apps Script ID: "
+        echo PROJECT_PATH=!PROJECT_PATH!> "%CONFIG_FILE%"
+        echo SCRIPT_ID=!SCRIPT_ID!>> "%CONFIG_FILE%"
+        echo [+] New Script ID saved!
+    )
 ) else (
     echo [!] STEP 1/2: Folder Location
     echo ---------------------------------------------------
@@ -56,7 +70,12 @@ if exist "%CONFIG_FILE%" (
 cd /d "!PROJECT_PATH!"
 echo.
 
-:: 4. Google Login
+:: 4. Force Link Active Script ID to .clasp.json
+echo {"scriptId":"!SCRIPT_ID!"}> .clasp.json
+echo [+] Linked to Script ID: !SCRIPT_ID!
+
+:: 5. Google Login
+echo.
 echo [!] Google Clasp Login
 echo ---------------------------------------------------
 echo Type Y to open browser login, or press ENTER to skip.
@@ -67,14 +86,10 @@ if /i "!doLogin!"=="Y" (
     call clasp login
 )
 
-:: 5. Deployment
+:: 6. Deployment
 echo.
 echo [~] Deploying code to Google Apps Script...
-if not exist ".clasp.json" (
-    call clasp clone !SCRIPT_ID!
-)
-
-call clasp push
+call clasp push --force
 
 echo.
 echo ===================================================
