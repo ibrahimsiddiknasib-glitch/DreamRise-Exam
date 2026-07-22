@@ -1,94 +1,83 @@
 @echo off
-chcp 65001 >nul
 setlocal enabledelayedexpansion
 color 0A
-TITLE DreamRise Exam - 1-Click Auto Deployer
+TITLE DreamRise Exam - Auto Deployer
 
 echo ===================================================
 echo      DreamRise Exam - Auto Setup ^& Deploy
 echo ===================================================
 echo.
 
-:: ১. Node.js চেক করা
+:: 1. Check Node.js
 where node >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [!] আপনার পিসিতে Node.js ইন্সটল করা নেই! 
-    set /p installNode="আপনি কি স্বয়ংক্রিয়ভাবে Node.js ইন্সটল করতে চান? (Y/N): "
-    if /i "!installNode!"=="Y" (
-        echo [~] Node.js ডাউনলোড এবং ইন্সটল হচ্ছে...
-        winget install OpenJS.NodeJS -e --source winget
-        echo [+] Node.js ইন্সটল সম্পন্ন! কমান্ড উইন্ডোটি কেটে দিয়ে আবার ওপেন করুন।
-        pause
-        exit
-    ) else (
-        echo [!] স্ক্রিপ্টটি চালাতে আপনাকে নিজে Node.js ইন্সটল করতে হবে।
-        pause
-        exit
-    )
-) else (
-    echo [+] Node.js ঠিকঠাক আছে।
+    echo [!] Node.js is missing. Installing...
+    winget install OpenJS.NodeJS -e --source winget
+    echo [+] Node.js installed! Please close and reopen this window.
+    pause & exit
 )
 
-:: ২. Clasp চেক ও ইন্সটল করা
+:: 2. Check Clasp
 where clasp >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [~] Google Clasp ইন্সটল করা হচ্ছে...
+    echo [~] Installing Google Clasp...
     call npm install -g @google/clasp
-    echo [+] Clasp ইন্সটল সম্পন্ন!
-) else (
-    echo [+] Google Clasp রেডি আছে।
 )
-echo.
 
-:: ৩. কনফিগারেশন ফাইল চেক ও সেভ করা
+:: 3. Setup Configuration
 set CONFIG_FILE=dreamrise_config.txt
 
 if exist "%CONFIG_FILE%" (
-    echo [+] আগের সেভ করা কনফিগারেশন পাওয়া গেছে!
-    for /f "usebackq delims=" %%x in ("%CONFIG_FILE%") do (
-        set "%%x"
-    )
+    echo [+] Configuration loaded automatically!
+    for /f "usebackq delims=" %%x in ("%CONFIG_FILE%") do (set "%%x")
 ) else (
-    echo [!] কোনো আগের সেটআপ পাওয়া যায়নি। চলুন একবার সেটআপ করে নিই!
-    echo.
-    echo টিপস: প্রজেক্ট ফোল্ডারের ভেতরে থাকলে নিচে শুধু একটি ডট . দিন।
-    set /p PROJECT_PATH="আপনার প্রজেক্ট ফোল্ডারের লোকেশন দিন [অথবা বর্তমান ফোল্ডারের জন্য . দিন]: "
+    echo [!] STEP 1/2: Folder Location
+    echo ---------------------------------------------------
+    echo Just press ENTER to use current folder.
+    echo ---------------------------------------------------
+    set "PROJECT_PATH="
+    set /p PROJECT_PATH="Project Path [Press ENTER for Current]: "
     
-    if "!PROJECT_PATH!"=="." (
-        set "PROJECT_PATH=%cd%"
-    )
+    if "!PROJECT_PATH!"=="" set "PROJECT_PATH=%cd%"
 
-    set /p SCRIPT_ID="আপনার Google Apps Script ID টি পেস্ট করুন: "
+    echo.
+    echo [!] STEP 2/2: Apps Script ID
+    echo ---------------------------------------------------
+    echo Paste your Google Apps Script ID below.
+    echo ---------------------------------------------------
+    set /p SCRIPT_ID="Apps Script ID: "
     
     echo PROJECT_PATH=!PROJECT_PATH!> "%CONFIG_FILE%"
     echo SCRIPT_ID=!SCRIPT_ID!>> "%CONFIG_FILE%"
-    echo [+] ডাটা সেভ করা হয়েছে! পরবর্তীতে আর এই তথ্যগুলো চাইবে না।
+    echo.
+    echo [+] Saved successfully!
 )
 
-:: ৪. প্রজেক্ট ফোল্ডারে প্রবেশ
 cd /d "!PROJECT_PATH!"
 echo.
 
-:: ৫. লগইন চেক
-echo [?] Google Clasp-এ কি আপনার অ্যাকাউন্ট লগইন করা আছে?
-set /p doLogin="নতুন করে লগইন করতে চাইলে Y আর করা থাকলে N লিখুন (Y/N): "
+:: 4. Google Login
+echo [!] Google Clasp Login
+echo ---------------------------------------------------
+echo Type Y to open browser login, or press ENTER to skip.
+echo ---------------------------------------------------
+set "doLogin=N"
+set /p doLogin="Login now? [Y/N, Default: N]: "
 if /i "!doLogin!"=="Y" (
-    echo [~] ব্রাউজারে লগইন পেজ ওপেন হচ্ছে...
     call clasp login
 )
 
-:: ৬. প্রজেক্ট লিংক ও কোড পুশ
+:: 5. Deployment
 echo.
+echo [~] Deploying code to Google Apps Script...
 if not exist ".clasp.json" (
-    echo [~] আপনার প্রজেক্ট গুগল শিটের সাথে লিংক করা হচ্ছে...
     call clasp clone !SCRIPT_ID!
 )
 
-echo [~] আপনার কোড গুগল শিটে আপলোড (Push) করা হচ্ছে...
 call clasp push
 
 echo.
 echo ===================================================
-echo    মাশাআল্লাহ! সফলভাবে আপনার কোড ডিপ্লয় হয়েছে।
+echo    SUCCESS! Deployment completed.
 echo ===================================================
 pause
