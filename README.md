@@ -248,6 +248,35 @@ and:
 
 ## Credits
 
+## 📸 Visual Tour (How It Looks)
+
+Here is a quick glimpse of what you are getting out of the box:
+
+<p align="center">
+  <img src="https://via.placeholder.com/600x300?text=Result+Portal+Dashboard+Screenshot" alt="Result Portal" width="48%">
+  <img src="https://via.placeholder.com/600x300?text=Generated+PDF+Report+Screenshot" alt="PDF Report" width="48%">
+</p>
+<p align="center">
+  <em>(Left: Public Result Portal | Right: Auto-Generated PDF Report)</em>
+</p>
+
+*(**Tip for you:** Replace the placeholder links above with the actual raw image links from your GitHub repository).*
+
+---
+
+## 🏗️ System Architecture (How It Works)
+
+Behind the scenes, DreamRise uses a clever serverless architecture purely based on Google's ecosystem. No extra database needed!
+
+```mermaid
+graph TD
+    A[Student Submits Google Form] -->|Auto-Triggers| B(Google Apps Script Engine)
+    B -->|Calculates Rank & Score| C[(Google Sheets Database)]
+    C -->|Generates Certificate| D[PDF Report Created in Drive]
+    C -->|Fetches Data| E{Public Result Web Portal}
+    Student[Student] -->|Searches ID/Roll| E
+    E -->|Displays Data| Student
+
 Developed by **Muhammad Ibrahim** for DreamRise.
 Facebook: [DreamRise](https://www.facebook.com/dreamriseadmission) ·
 [Muhammad Ibrahim](https://www.facebook.com/muhammadibrahimsiddiknasib)
