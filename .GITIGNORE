@@ -1,0 +1,15 @@
+# clasp (Apps Script CLI) local credentials — never commit these
+.clasprc.json
+.clasp-*.json
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# Local scratch files
+*.log
+*.tmp
