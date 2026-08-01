@@ -75,7 +75,95 @@ go live. Server-side-only changes (`Code.gs`, `SetupUI.html`) that don't
 touch `doGet()` output take effect immediately for menu actions, but a new
 deployment is still the safest way to make sure everything is in sync.
 
-## Notes
+## How to Use
+
+### 1. Prepare the response sheet
+
+The **first sheet** of the spreadsheet is the source of truth. It needs:
+
+- A **header row** (within the first 5 rows) containing a name column
+  (matches "নাম" / "name" / "student"), a phone column (matches "whatsapp" /
+  "phone" / "মোবাইল" / "contact"), and optionally a district/college column
+  (matches "জেলা" / "district" / "college" / "বিভাগ").
+- An **Answer Key row** — one row where the name column contains something
+  like "Answer Key" and the question columns contain the correct answers.
+  Any row works as long as you tell the Setup Wizard its row number.
+- One row per student with their answers in the same question columns.
+
+This is normally just a Google Form response sheet, with one extra manual
+row added for the answer key.
+
+### 2. Run the Setup Wizard (🚀 DreamRise System → ⚙️ Full System Setup)
+
+| Field | What it does |
+|---|---|
+| পরীক্ষার নাম (Exam name) | Shown on the Ranking Page, PDF Report, and portal. |
+| সঠিক মার্ক (+) / ভুল (নেগেটিভ) | Marks awarded per correct answer / deducted per wrong answer. |
+| অ্যানসার কী রো নম্বর | The spreadsheet row number (1-based) containing the answer key. |
+| সামগ্রিক পাস মার্ক (Total Pass %) | The percentage of the (grand) full marks a student needs to pass overall. |
+| সাবজেক্ট ভিত্তিক কন্ডিশন আছে? | **না** — score the whole question range as one block. **হ্যাঁ** — split into named subjects, each with its own column range and its own pass mark; a student can fail by missing *any one* subject's pass mark even if their overall percentage clears the total pass %. |
+| প্রশ্নের কলাম রেঞ্জ | (Standard mode only) Spreadsheet column range holding the questions, e.g. `G:DB`. |
+| সাবজেক্ট সংখ্যা + rows | (Subject-wise mode) Name, column range, and pass mark per subject. |
+| অতিরিক্ত মার্ক (লিখিত/হোমওয়ার্ক) | Optional. Toggle on to add a written/homework mark on top of the MCQ score. Choose **Overall** (one combined mark + pass mark) or **Subject-wise** (one mark + pass mark per subject, mirroring the subjects above). This is re-entered/re-confirmed every time you open the wizard — it doesn't silently carry over. |
+
+Saving triggers the first sync automatically and sets up the automation
+triggers described below.
+
+### 3. Enter marks after the exam
+
+- **MCQ**: happens automatically as students submit the Google Form (see
+  Automation below).
+- **Additional Mark (written/homework)**: after the first sync, open the
+  **Ranking Page** sheet and manually type marks into the Additional Mark
+  column(s) for each student, then run **🔄 Manual Sync Ranking** again from
+  the menu. The script reads what you typed before rebuilding the sheet, so
+  nothing is lost — it folds your entries into the new Grand Total and
+  re-checks pass/fail (including the Additional Mark's own pass mark, if
+  set).
+
+### 4. Automation (happens without you doing anything)
+
+- **New form submission** → recalculates automatically a few seconds after
+  the last submission in a burst (so many students submitting at once
+  doesn't trigger dozens of overlapping recalculations).
+- **Editing the Answer Key row** → recalculates immediately.
+- **Editing a student's answers** → recalculates ~30 seconds later (bulk
+  edits don't each trigger a separate run).
+- **A student searching the portal** → if the cached data is more than a
+  minute old, a background sync is scheduled automatically; if their exact
+  row isn't found in the sync yet, the portal computes their result
+  directly from the source sheet as a fallback, so they never see a stale
+  "not found."
+
+### 5. Menu reference (🚀 DreamRise System)
+
+| Menu item | What it does |
+|---|---|
+| ⚙️ Full System Setup | Opens the Setup Wizard (see above). |
+| 🔄 Manual Sync Ranking | Re-scores everyone from scratch right now — use after entering Additional Marks, or any time you want an immediate refresh. |
+| 🖨️ Instant Print (Ranking Page) | Generates a landscape PDF of the Ranking Page and opens a download link. |
+| 📄 Instant PDF Report (Download) | Generates a portrait PDF of the detailed per-student report (includes subject breakdowns) and opens a download link. |
+| 📊 Show Statistics | Score distribution, rank-band breakdown, and subject overview charts in a printable dialog. |
+| ❌ Fail/Weak Report (WhatsApp) | Two lists — students who failed overall, and students who passed but are weak in a specific subject — each row has a ready-to-send (editable) WhatsApp message naming the weak subject(s). |
+| 🔁 Reset System Settings | Wipes all saved configuration, cache, and the backup sheet. Use only if you want to reconfigure an exam from a blank slate — you'll need to run Setup again afterward. |
+
+### 6. The student-facing portal
+
+Once deployed as a web app (see Setup step 5 above), students visit the URL
+and:
+
+1. Type their phone number (Bengali or English digits both work) and tap
+   খুঁজুন.
+2. See their rank, score, percentile, and a full breakdown — including a
+   **pass/fail badge on every individual subject and on the Additional
+   Mark**, so a specific weak area is visible immediately rather than
+   requiring them to read raw numbers.
+3. Can tap ডাউনলোড / প্রিন্ট for a clean PDF-style printout, or রেজাল্ট
+   কপি করুন to copy a shareable text summary.
+4. Top-3 and rank-1 finishers get a confetti animation; failing students see
+   a motivational message instead of just a bare "FAIL."
+
+
 
 - All UI/PDF text is in Bengali (Anek Bangla / Hind Siliguri fonts); the menu
   and inline code comments are bilingual.
