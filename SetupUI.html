@@ -78,6 +78,51 @@
       <div id="subContainer" style="margin-top:10px;"></div>
     </div>
 
+    <!-- ═══════════ Additional Mark (লিখিত/হোমওয়ার্ক) সেকশন ═══════════ -->
+    <div class="sub-section" style="border-color:#16a34a;">
+      <label style="margin-top:0;">
+        <input type="checkbox" id="hasAddl" onchange="toggleAddl()" style="width:auto; display:inline-block; vertical-align:middle; margin-right:6px;">
+        অতিরিক্ত মার্ক (লিখিত/হোমওয়ার্ক) এই রানে যোগ করবেন?
+      </label>
+      <small>প্রতিবার রান করার সময় আলাদাভাবে সিলেক্ট করতে হবে — চাইলে এখানে এসে আবার এডিট করে রি-রান করা যাবে।</small>
+
+      <div id="addlModeBox" style="display:none; margin-top:10px;">
+        <label>অতিরিক্ত মার্ক কীভাবে যোগ হবে?</label>
+        <select id="addlMode" onchange="renderAddlRows()">
+          <option value="overall">সম্পূর্ণ Total-এর সাথে (Overall)</option>
+          <option value="subjectwise">প্রতিটা সাবজেক্টে আলাদা (Subject-wise)</option>
+        </select>
+
+        <!-- Overall mode: name + max mark + pass mark
+             NEW: পাস মার্ক ফিল্ড যোগ করা হয়েছে — এখন Subject-wise মোডের
+             মতোই Overall Additional Mark-এরও নিজস্ব পাস মার্ক থাকবে।
+             এই মার্ক পাস-থ্রেশহোল্ডের নিচে থাকলে ছাত্র সার্বিকভাবে ফেইল
+             ধরা হবে, শুধু সামগ্রিক Grand Total পাস % দিয়ে বিচার করা হবে না। -->
+        <div id="addlOverallBox" style="margin-top:10px;">
+          <div class="sub-row" style="grid-template-columns:2fr 1fr 1fr;">
+            <input type="text"   id="addlName" placeholder="নাম (যেমন: লিখিত)">
+            <input type="number" id="addlMax"  placeholder="সর্বোচ্চ মার্ক">
+            <input type="number" id="addlPass" placeholder="পাস মার্ক">
+          </div>
+          <small>এই বিষয়ে পাস মার্কের নিচে পেলে ছাত্র সার্বিকভাবে ফেইল করবে (খালি রাখলে পাস মার্ক ০ ধরা হবে)।</small>
+        </div>
+
+        <!-- Subject-wise mode: mirrors subject names already entered above -->
+        <div id="addlSubBox" style="display:none; margin-top:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <small>সাবজেক্ট (উপরের লিস্ট থেকে অটো)</small>
+            <button type="button" onclick="renderAddlRows()"
+              style="width:auto; padding:4px 10px; font-size:11px; background:#e2e8f0; border:none; border-radius:4px; cursor:pointer;">
+              🔄 তালিকা রিফ্রেশ
+            </button>
+          </div>
+          <div class="sub-row" style="margin-top:5px;"><small>সাবজেক্ট</small><small>সর্বোচ্চ মার্ক</small><small>পাস মার্ক</small></div>
+          <div id="addlSubContainer"></div>
+          <small>উপরের "সাবজেক্ট সংখ্যা" অংশে নাম বদলালে "🔄 তালিকা রিফ্রেশ"-এ ক্লিক করুন।</small>
+        </div>
+      </div>
+    </div>
+
     <button class="btn-save" id="saveBtn" onclick="save()">সেভ এবং অটো-র‍্যাঙ্ক</button>
   </div>
 
@@ -88,22 +133,60 @@
       document.getElementById('subBox').style.display    = isSub ? 'block' : 'none';
       document.getElementById('normalBox').style.display = isSub ? 'none'  : 'block';
       if (isSub) renderSubRows();
+
+      // সাবজেক্ট-ওয়াইজ MCQ চালু না থাকলে Additional Mark-এও "Subject-wise"
+      // অপশনটা অর্থহীন (কোনো সাবজেক্ট নামই থাকবে না) — তাই disable রাখা হলো।
+      const addlSubOption = document.querySelector('#addlMode option[value="subjectwise"]');
+      addlSubOption.disabled = !isSub;
+      if (!isSub && document.getElementById('addlMode').value === 'subjectwise') {
+        document.getElementById('addlMode').value = 'overall';
+        renderAddlRows();
+      }
     }
 
     /* Dynamically build subject input rows based on selected count */
-    function renderSubRows() {
+    function renderSubRows(prefillSubjects) {
       const count     = document.getElementById('subCount').value;
       const container = document.getElementById('subContainer');
       container.innerHTML =
         '<div class="sub-row"><small>নাম</small><small>রেঞ্জ</small><small>পাস নম্বর</small></div>';
       for (let i = 0; i < count; i++) {
+        const pf = (prefillSubjects && prefillSubjects[i]) || {};
         container.innerHTML += `
           <div class="sub-row">
-            <input type="text"   class="s-name"  placeholder="বাংলা">
-            <input type="text"   class="s-range" placeholder="G:L">
-            <input type="number" class="s-pass"  value="5">
+            <input type="text"   class="s-name"  placeholder="বাংলা" value="${pf.name || ''}">
+            <input type="text"   class="s-range" placeholder="G:L"   value="${pf.range || ''}">
+            <input type="number" class="s-pass"  value="${pf.pass != null ? pf.pass : 5}">
           </div>`;
       }
+    }
+
+    /* ── Additional Mark section handlers ── */
+    function toggleAddl() {
+      document.getElementById('addlModeBox').style.display =
+        document.getElementById('hasAddl').checked ? 'block' : 'none';
+      if (document.getElementById('hasAddl').checked) renderAddlRows();
+    }
+
+    function renderAddlRows(prefillAddlSubjects) {
+      const mode = document.getElementById('addlMode').value;
+      document.getElementById('addlOverallBox').style.display = mode === 'overall'      ? 'block' : 'none';
+      document.getElementById('addlSubBox').style.display     = mode === 'subjectwise'  ? 'block' : 'none';
+      if (mode !== 'subjectwise') return;
+
+      const names     = document.querySelectorAll('.s-name');
+      const container = document.getElementById('addlSubContainer');
+      container.innerHTML = '';
+      names.forEach((n, i) => {
+        if (!n.value) return;
+        const pf = (prefillAddlSubjects && prefillAddlSubjects.find(x => x.name === n.value)) || {};
+        container.innerHTML += `
+          <div class="sub-row" style="grid-template-columns:2fr 1fr 1fr;">
+            <input type="text"   value="${n.value}" disabled style="background:#f1f5f9;">
+            <input type="number" class="addl-max"  placeholder="সর্বোচ্চ" value="${pf.max != null ? pf.max : ''}">
+            <input type="number" class="addl-pass" placeholder="পাস"     value="${pf.pass != null ? pf.pass : ''}">
+          </div>`;
+      });
     }
 
     /* Collect all field values and call saveConfiguration() on the server */
@@ -142,6 +225,34 @@
         });
       }
 
+      /* Collect Additional Mark (লিখিত/হোমওয়ার্ক) config, যদি চেক করা থাকে */
+      config.hasAdditionalMark = document.getElementById('hasAddl').checked;
+      config.additionalMode       = "";
+      config.additionalOverall    = null;
+      config.additionalSubjects   = [];
+      if (config.hasAdditionalMark) {
+        config.additionalMode = document.getElementById('addlMode').value;
+        if (config.additionalMode === 'overall') {
+          // NEW: পাস মার্কও কনফিগে যোগ করা হচ্ছে
+          config.additionalOverall = {
+            name: document.getElementById('addlName').value || 'Additional',
+            max:  document.getElementById('addlMax').value  || 0,
+            pass: document.getElementById('addlPass').value || 0
+          };
+        } else {
+          const rows = document.querySelectorAll('#addlSubContainer .sub-row');
+          rows.forEach((row, i) => {
+            const maxEl  = row.querySelector('.addl-max');
+            const passEl = row.querySelector('.addl-pass');
+            config.additionalSubjects.push({
+              name: config.subjects[i] ? config.subjects[i].name : '',
+              max:  maxEl  ? (maxEl.value  || 0) : 0,
+              pass: passEl ? (passEl.value || 0) : 0
+            });
+          });
+        }
+      }
+
       /* Send config to Apps Script backend and close dialog on success */
       google.script.run
         .withSuccessHandler(() => { google.script.host.close(); })
@@ -152,6 +263,41 @@
         })
         .saveConfiguration(config);
     }
+
+    /* ── আগে সেভ করা কনফিগারেশন লোড করে ফর্ম প্রি-ফিল করা ──
+       এতে ভুল হলে আবার Setup Wizard খুলে এডিট করে রি-রান করা যায়,
+       পুরোটা আবার নতুন করে টাইপ করতে হয় না। */
+    function fillForm(saved) {
+      if (!saved || !saved.examName) return; // প্রথমবার রান — কিছু সেভ নেই
+      document.getElementById('examName').value   = saved.examName   || '';
+      document.getElementById('posMark').value    = saved.posMark    || 1;
+      document.getElementById('negMark').value    = saved.negMark    || 0.25;
+      document.getElementById('ansKeyRow').value   = saved.ansKeyRow || '';
+      document.getElementById('globalPass').value = saved.globalPass|| 40;
+      document.getElementById('stdRange').value   = saved.standardRange || '';
+      document.getElementById('isSub').value      = saved.isSubjectWise ? 'true' : 'false';
+      toggleSub();
+
+      if (saved.isSubjectWise && saved.subjects && saved.subjects.length) {
+        document.getElementById('subCount').value = String(saved.subjects.length);
+        renderSubRows(saved.subjects);
+      }
+
+      if (saved.hasAdditionalMark) {
+        document.getElementById('hasAddl').checked = true;
+        toggleAddl();
+        document.getElementById('addlMode').value = saved.additionalMode || 'overall';
+        if (saved.additionalMode === 'overall' && saved.additionalOverall) {
+          document.getElementById('addlName').value = saved.additionalOverall.name || '';
+          document.getElementById('addlMax').value  = saved.additionalOverall.max  || '';
+          // NEW: পাস মার্ক প্রি-ফিল
+          document.getElementById('addlPass').value = saved.additionalOverall.pass || '';
+        }
+        renderAddlRows(saved.additionalSubjects || []);
+      }
+    }
+
+    google.script.run.withSuccessHandler(fillForm).getSavedConfig();
   </script>
 </body>
 </html>
