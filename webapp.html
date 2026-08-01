@@ -39,6 +39,31 @@
     body.theme-pass { --theme-color: var(--success); --primary: var(--success); --primary-dark: #059669; }
     body.theme-fail { --theme-color: var(--danger); --primary: var(--danger); --primary-dark: #b91c1c; }
 
+    /* ── Pass/Fail semantic colors — slick pill-badge look, tuned separately
+       for light and dark themes so contrast stays clean in both. ── */
+    :root {
+      --pass-bg: rgba(16,185,129,0.10);
+      --pass-text: #047857;
+      --pass-border: #10b981;
+      --fail-bg: rgba(239,68,68,0.08);
+      --fail-text: #b91c1c;
+      --fail-border: #ef4444;
+      --pending-bg: rgba(100,116,139,0.10);
+      --pending-text: #64748b;
+      --pending-border: #cbd5e1;
+    }
+    body.dark-mode {
+      --pass-bg: rgba(16,185,129,0.16);
+      --pass-text: #34d399;
+      --pass-border: #10b981;
+      --fail-bg: rgba(239,68,68,0.14);
+      --fail-text: #f87171;
+      --fail-border: #ef4444;
+      --pending-bg: rgba(148,163,184,0.14);
+      --pending-text: #94a3b8;
+      --pending-border: #475569;
+    }
+
     body {
       font-family: 'Anek Bangla', 'Inter', sans-serif;
       background: var(--bg);
@@ -253,21 +278,60 @@
       background:var(--bg); padding:25px; border-radius:15px;
       border:1px solid var(--border); margin-bottom:30px; display:none;
     }
-    .subject-item { margin-bottom:15px; padding-bottom:15px; border-bottom:1px solid var(--border); }
+    .subject-item {
+      margin-bottom:12px; padding:12px 14px 14px;
+      border-bottom:1px solid var(--border);
+      border-left: 4px solid transparent;
+      border-radius: 10px;
+      transition: background 0.25s ease, border-color 0.25s ease;
+    }
     .subject-item:last-child { border-bottom: none; }
+    /* Failed subjects (MCQ or Additional Mark) get an unmissable red tint +
+       left accent bar; passed ones get a subtle green accent so the eye
+       can scan pass/fail at a glance without reading every number. */
+    .subject-item.failed {
+      background: var(--fail-bg);
+      border-left-color: var(--fail-border);
+    }
+    .subject-item.passed {
+      border-left-color: var(--pass-border);
+    }
     .subject-item-header {
       display: flex;
       justify-content: space-between;
-      align-items: baseline;
+      align-items: center;
       gap: 10px;
       font-weight: bold;
       flex-wrap: wrap;
+    }
+    .subject-name-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      min-width: 0;
     }
     .subject-item-header .subject-name {
       min-width: 0;
       overflow-wrap: break-word;
       word-break: break-word;
     }
+    /* Slick pill badge — used for both MCQ subjects and Additional Mark items */
+    .subject-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+      line-height: 1.6;
+    }
+    .subject-badge.pass    { background: var(--pass-bg);    color: var(--pass-text);    border: 1px solid var(--pass-border); }
+    .subject-badge.fail    { background: var(--fail-bg);    color: var(--fail-text);    border: 1px solid var(--fail-border); }
+    .subject-badge.pending { background: var(--pending-bg); color: var(--pending-text); border: 1px solid var(--pending-border); }
     .subject-item-meta {
       font-size: 0.9rem;
       color: var(--text-light);
@@ -277,7 +341,8 @@
       gap: 4px 10px;
     }
     .progress-bar { height:10px; background:var(--border); border-radius:10px; overflow:hidden; margin-top:10px; }
-    .progress-fill { height:100%; background:var(--theme-color); border-radius:10px; transition:width 1s ease; }
+    .progress-fill { height:100%; background:var(--theme-color); border-radius:10px; transition:width 1s ease, background 0.25s ease; }
+    .progress-fill.fail-fill { background: var(--fail-border); }
 
     /* ── Fail Banner ── */
     .fail-banner {
@@ -437,6 +502,21 @@
     @media print {
       @page { size:A4 portrait; margin:6mm; }
 
+      /* বাগ ফিক্স: ডার্ক মোড অন থাকা অবস্থায় প্রিন্ট করলেও যেন সবসময়
+         লাইট মোডেই প্রিন্ট হয় — body.dark-mode যেসব CSS ভ্যারিয়েবল
+         বদলে দেয় (--bg, --card, --text ইত্যাদি), প্রিন্টের সময় সেগুলোকে
+         জোর করে লাইট ভ্যালুতে রিসেট করে দেওয়া হচ্ছে। যেহেতু পুরো UI-এর
+         প্রতিটা কার্ড/সেকশন এই ভ্যারিয়েবলগুলো থেকেই রং নেয়, এই একটা
+         override দিয়েই পুরো পেইজ প্রিন্টে লাইট মোডে চলে আসবে। */
+      body, body.dark-mode {
+        --bg: #ffffff;
+        --card: #ffffff;
+        --text: #000000;
+        --text-light: #333333;
+        --border: #000000;
+        --shadow: rgba(0,0,0,0.1);
+      }
+
       html, body {
         height:auto !important;
         overflow:visible !important;
@@ -570,7 +650,6 @@
       <div class="print-header">
         <img id="printLogo" src="" alt="DreamRise"
              onerror="this.style.display='none'">
-        <div class="print-title">DreamRise</div>
         <div class="print-sub">Official Admission Assessment Result | Your path to smart Admission</div>
         <div id="printSummaryText" style="font-size:8pt; color:#333; margin-top:3px; font-weight:600;"></div>
       </div>
@@ -603,7 +682,11 @@
         </div>
         <div class="stat-card">
           <div class="stat-value" id="r-score">-</div>
-          <div class="stat-label">প্রাপ্ত স্কোর</div>
+          <div class="stat-label" id="r-score-label">প্রাপ্ত স্কোর</div>
+        </div>
+        <div class="stat-card" id="grandTotalCard" style="display:none;">
+          <div class="stat-value" id="r-grand">-</div>
+          <div class="stat-label">Grand Total (MCQ+লিখিত)</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" id="r-correct">-</div>
@@ -649,6 +732,12 @@
       <div class="subject-section" id="subjectSection">
         <div class="info-title" style="border:none;">বিষয়ভিত্তিক ফলাফল</div>
         <div id="subjectList"></div>
+      </div>
+
+      <!-- Additional Mark (লিখিত/হোমওয়ার্ক) বিস্তারিত -->
+      <div class="subject-section" id="additionalSection" style="display:none;">
+        <div class="info-title" style="border:none;">লিখিত/অতিরিক্ত মার্ক বিবরণ</div>
+        <div id="additionalList"></div>
       </div>
 
       <!-- Actions -->
@@ -978,13 +1067,18 @@
       document.getElementById('r-wrong').innerText    = totalWrong;
       document.getElementById('r-full').innerText    = data.meta.fullMarks;
 
-      const totalQ    = Number(data.meta.totalQ) || 0;
-      const marksPerQ = totalQ > 0 ? (data.meta.fullMarks / totalQ) : 0;
-      const totalNeg  = (totalCorrect * marksPerQ) - data.score;
-      const negPerQ   = totalWrong > 0 ? (totalNeg / totalWrong) : 0;
+      /* FIXED: প্রতি প্রশ্নের মান আর নেগেটিভ মার্ক এখন সরাসরি
+         meta.posMark / meta.negMark থেকে নেওয়া হয় — এগুলো Setup Wizard-এ
+         যা বসানো হয়েছে ঠিক তাই, কোনো ডেরাইভেশন ছাড়াই। আগে এগুলো
+         "fullMarks ÷ totalQ" দিয়ে হিসাব করা হতো, কিন্তু Additional Mark
+         চালু থাকলে fullMarks-এর মধ্যে লিখিত মার্কও যোগ হয়ে থাকে বলে সেই
+         ভাগফল আসল পজিটিভ/নেগেটিভ মার্ক থেকে সরে যেত (যেমন ১.২৫ এর জায়গায়
+         ১.২০, বা ০.২৫ এর জায়গায় ০.৬৩ দেখাত)। */
+      const marksPerQ = Number(data.meta.posMark) || 0;
+      const negPerQ   = Number(data.meta.negMark) || 0;
 
-      document.getElementById('r-per-q').innerText    = marksPerQ > 0 ? marksPerQ.toFixed(2) : '0';
-      document.getElementById('r-neg-mark').innerText = negPerQ   > 0 ? negPerQ.toFixed(2)   : '0';
+      document.getElementById('r-per-q').innerText    = marksPerQ.toFixed(2);
+      document.getElementById('r-neg-mark').innerText = negPerQ.toFixed(2);
 
       /* Summary bar update */
       if (data.meta.summaryText) {
@@ -1013,7 +1107,7 @@
              (attempted প্রশ্নের সংখ্যার ভিত্তিতে নয়)।
              বিষয়ের পূর্ণমান বের করার অগ্রাধিকার:
                ১) s.full  → backend থেকে সরাসরি বিষয়ের পূর্ণমান এলে সেটাই ব্যবহার হয় (সবচেয়ে সঠিক)
-               ২) s.total → বিষয়ের মোট প্রশ্ন সংখ্যা এলে, তা × প্রতি-প্রশ্নের-মান
+               ২) s.total → বিষয়ের মোট প্রশ্ন সংখ্যা এলে, তা × প্রতি-প্রশ্নের-মান (marksPerQ)
                ৩) fallback → পরীক্ষার মোট পূর্ণমানকে বিষয় সংখ্যা দিয়ে সমান ভাগ (assumption: সব বিষয়ে সমান নম্বর)
              সম্পূর্ণ নির্ভুল ফলাফলের জন্য backend থেকে s.full বা s.total পাঠানো ভালো। */
           let subjectFullMarks;
@@ -1029,11 +1123,25 @@
           if (isNaN(per) || !isFinite(per) || per < 0) per = 0;
           per = per.toFixed(0);
 
+          /* প্রতিটা সাবজেক্টে আলাদাভাবে পাস/ফেইল যাচাই — নির্দিষ্ট কোন
+             বিষয়ে সমস্যা তা যেন এক নজরেই বোঝা যায় (সামগ্রিক ফলাফলের
+             উপর নির্ভর না করে, প্রতিটা সাবজেক্টের নিজস্ব পাস মার্ক দিয়ে)। */
+          const subPassMark = parseFloat(s.pass) || 0;
+          const isSubPass   = sScore >= subPassMark;
+          const itemClass   = isSubPass ? 'passed' : 'failed';
+          const badgeHtml   = isSubPass
+            ? '<span class="subject-badge pass">✅ পাস</span>'
+            : '<span class="subject-badge fail">❌ ফেইল</span>';
+          const fillClass   = isSubPass ? '' : 'fail-fill';
+
           const asciiBar = '[' + '#'.repeat(Math.round(per/2)) + '-'.repeat(50 - Math.round(per/2)) + '] ' + per + '%';
           subHtml += `
-            <div class="subject-item">
+            <div class="subject-item ${itemClass}">
               <div class="subject-item-header">
-                <span class="subject-name">${s.name}</span><span>স্কোর: ${s.score}</span>
+                <span class="subject-name-wrap">
+                  <span class="subject-name">${s.name}</span>${badgeHtml}
+                </span>
+                <span>স্কোর: ${s.score}</span>
               </div>
               <div class="subject-item-meta">
                 <span>চেষ্টা: ${sAttempt}</span>
@@ -1041,13 +1149,86 @@
                 <span>ভুল: ${sWrong}</span>
                 <span>পাস: ${s.pass}</span>
               </div>
-              <div class="progress-bar"><div class="progress-fill" style="width:${per}%"></div></div>
+              <div class="progress-bar"><div class="progress-fill ${fillClass}" style="width:${per}%"></div></div>
               <div class="print-ascii">${asciiBar}</div>
             </div>`;
         });
         document.getElementById('subjectList').innerHTML = subHtml;
       } else {
         subSec.style.display = 'none';
+      }
+
+      /* ── Additional Mark (লিখিত/হোমওয়ার্ক) — Grand Total কার্ড ও বিস্তারিত ── */
+      const addlCard    = document.getElementById('grandTotalCard');
+      const addlSection = document.getElementById('additionalSection');
+      const scoreLabel  = document.getElementById('r-score-label');
+
+      if (data.hasAdditionalMark) {
+        scoreLabel.innerText = 'MCQ স্কোর';
+        addlCard.style.display = 'block';
+        document.getElementById('r-grand').innerText = parseFloat(data.grandTotal).toFixed(2);
+
+        const ad = data.additional;
+        let addlHtml = '';
+        /* নাম্বার এখনো না বসালে (value === null) পাস/ফেইল বলা যাবে না —
+           তখন নিউট্রাল "⏳ এখনো বসানো হয়নি" ব্যাজ দেখানো হয়, ভুলভাবে
+           ফেইল দেখানো হয় না। নাম্বার বসানো থাকলে সেই নির্দিষ্ট বিষয়ের
+           পাস মার্কের সাথে তুলনা করে পাস/ফেইল ব্যাজ + লাল/সবুজ কার্ড। */
+        if (ad && ad.mode === 'overall') {
+          const shown = (ad.value === null || ad.value === undefined) ? 'এখনো বসানো হয়নি' : ad.value;
+          let itemClass = '', badgeHtml = '<span class="subject-badge pending">⏳ এখনো বসানো হয়নি</span>';
+          if (ad.value !== null && ad.value !== undefined) {
+            const isPass = Number(ad.value) >= (parseFloat(ad.pass) || 0);
+            itemClass  = isPass ? 'passed' : 'failed';
+            badgeHtml  = isPass
+              ? '<span class="subject-badge pass">✅ পাস</span>'
+              : '<span class="subject-badge fail">❌ ফেইল</span>';
+          }
+          addlHtml = `
+            <div class="subject-item ${itemClass}">
+              <div class="subject-item-header">
+                <span class="subject-name-wrap">
+                  <span class="subject-name">${ad.name}</span>${badgeHtml}
+                </span>
+                <span>প্রাপ্ত: ${shown}${(ad.value!==null?(' / '+ad.max):'')}</span>
+              </div>
+              <div class="subject-item-meta">
+                <span>সর্বোচ্চ: ${ad.max}</span>
+                <span>পাস মার্ক: ${ad.pass}</span>
+              </div>
+            </div>`;
+        } else if (ad && ad.mode === 'subjectwise' && ad.subs) {
+          addlHtml = ad.subs.map(s => {
+            const shown = (s.value === null || s.value === undefined) ? 'এখনো বসানো হয়নি' : s.value;
+            let itemClass = '', badgeHtml = '<span class="subject-badge pending">⏳ এখনো বসানো হয়নি</span>';
+            if (s.value !== null && s.value !== undefined) {
+              const isPass = Number(s.value) >= (parseFloat(s.pass) || 0);
+              itemClass  = isPass ? 'passed' : 'failed';
+              badgeHtml  = isPass
+                ? '<span class="subject-badge pass">✅ পাস</span>'
+                : '<span class="subject-badge fail">❌ ফেইল</span>';
+            }
+            return `
+              <div class="subject-item ${itemClass}">
+                <div class="subject-item-header">
+                  <span class="subject-name-wrap">
+                    <span class="subject-name">${s.name}</span>${badgeHtml}
+                  </span>
+                  <span>প্রাপ্ত: ${shown}${(s.value!==null?(' / '+s.max):'')}</span>
+                </div>
+                <div class="subject-item-meta">
+                  <span>সর্বোচ্চ: ${s.max}</span>
+                  <span>পাস মার্ক: ${s.pass}</span>
+                </div>
+              </div>`;
+          }).join('');
+        }
+        document.getElementById('additionalList').innerHTML = addlHtml;
+        addlSection.style.display = addlHtml ? 'block' : 'none';
+      } else {
+        scoreLabel.innerText   = 'প্রাপ্ত স্কোর';
+        addlCard.style.display = 'none';
+        addlSection.style.display = 'none';
       }
 
       document.getElementById('resultCard').classList.add('active');
@@ -1058,12 +1239,16 @@
       if (!currentData) return;
       const d = currentData;
       const isPass = d.result === 'PASS' || d.result === 'পাস';
+      const hasAddl = !!d.hasAdditionalMark;
+      const scoreLine = hasAddl
+        ? `🏆 মেধা তালিকার স্থান: ${isPass ? d.rank : 'প্রযোজ্য নয়'} | MCQ স্কোর: ${parseFloat(d.score).toFixed(2)} | সর্বমোট (Grand Total): ${parseFloat(d.grandTotal).toFixed(2)}`
+        : `🏆 মেধা তালিকার স্থান: ${isPass ? d.rank : 'প্রযোজ্য নয়'} | প্রাপ্ত নাম্বার: ${parseFloat(d.score).toFixed(2)}`;
       const text = `
 🎓 DreamRise Official Result 🎓
 👤 পরীক্ষার্থী: ${d.name} | জেলা: ${d.district}
 📱 ফোন নম্বর: ${currentPhone}
 📝 পরীক্ষা: ${d.meta.examName}
-🏆 মেধা তালিকার স্থান: ${isPass ? d.rank : 'প্রযোজ্য নয়'} | প্রাপ্ত নাম্বার: ${parseFloat(d.score).toFixed(2)}
+${scoreLine}
 ✅ সঠিক: ${d.totalCorrect} | ❌ ভুল: ${d.totalWrong}
 🚩 ফলাফল: ${isPass ? '✅ PASS' : '❌ FAIL'}
 🔗 DreamRise - Your path to smart Admission 🚀`;
