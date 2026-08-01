@@ -75,6 +75,78 @@ go live. Server-side-only changes (`Code.gs`, `SetupUI.html`) that don't
 touch `doGet()` output take effect immediately for menu actions, but a new
 deployment is still the safest way to make sure everything is in sync.
 
+## Auto-deploy (Windows) — Optional
+
+This repository includes a simple helper script (`Auto-Deploy.bat`) that
+automates linking a local copy of the project to an existing Google Apps
+Script project and pushing the files using `clasp`. Use this if you prefer
+editing files locally (or from this repo clone) and want one-command deploys
+from Windows.
+
+Prerequisites
+
+- Windows 10/11 (PowerShell/CMD) with internet access.
+- Git (optional, for cloning the repo).
+- An existing Google Apps Script project (or create one in the Apps Script
+  editor) — you will need its *Script ID* (Apps Script editor → Project
+  Settings → Script ID).
+
+How to use Auto-Deploy.bat
+
+1. Clone or download this repository to your Windows machine and open the
+   folder in File Explorer.
+2. Double-click `Auto-Deploy.bat` (or run it from a CMD/PowerShell window).
+3. Follow the prompts:
+   - If you press ENTER for Project Path the script uses the current folder.
+   - Enter the Apps Script *Script ID* when prompted. (Get it from the
+     Apps Script editor: Project Settings → Script ID.)
+   - The script will create a small `dreamrise_config.txt` file to remember
+     the project path and Script ID for subsequent runs.
+4. When asked, allow the script to run `clasp login` to authenticate with
+   your Google account (this opens a browser window to sign in).
+5. The script writes a `.clasp.json` file with the provided Script ID and
+   runs `clasp push --force` to deploy the current local files into the
+   linked Apps Script project.
+
+Notes & Troubleshooting
+
+- The batch file attempts to install Node.js via `winget` if Node is missing
+  and installs `@google/clasp` globally if `clasp` is not present. You may
+  prefer to install Node.js and clasp manually (Node.js installer from
+  nodejs.org; `npm install -g @google/clasp`).
+- If `winget` is not available on your Windows machine, install Node.js
+  manually and rerun the batch file.
+- If `clasp push` fails with authorization errors, run `clasp login` from a
+  terminal, follow the browser login steps, and then re-run the batch file.
+- The script writes `.clasp.json` in the project path. If you already have
+  a `.clasp.json`, the script will overwrite it with the provided Script ID;
+  be cautious if that file contained other settings.
+- After clasp pushes files to Apps Script, remember to create a new
+  deployment version in the Apps Script editor (Deploy → Manage deployments)
+  if you want the web app URL/version updated for public users.
+
+Alternative: manual clasp workflow
+
+If you prefer to deploy manually without the batch script, here are the
+commands (run from the project folder):
+
+```bash
+# Install clasp (if not already installed)
+npm install -g @google/clasp
+
+# Authenticate (one-time)
+clasp login
+
+# Create or link to an existing project (linking example)
+# Create .clasp.json with the scriptId or run:
+# echo {"scriptId":"<YOUR_SCRIPT_ID>"} > .clasp.json
+
+# Push files to the linked Apps Script project
+clasp push --force
+```
+
+Replace `<YOUR_SCRIPT_ID>` with your Apps Script project's Script ID.
+
 ## How to Use
 
 ### 1. Prepare the response sheet
@@ -101,10 +173,10 @@ row added for the answer key.
 | সঠিক মার্ক (+) / ভুল (নেগেটিভ) | Marks awarded per correct answer / deducted per wrong answer. |
 | অ্যানসার কী রো নম্বর | The spreadsheet row number (1-based) containing the answer key. |
 | সামগ্রিক পাস মার্ক (Total Pass %) | The percentage of the (grand) full marks a student needs to pass overall. |
-| সাবজেক্ট ভিত্তিক কন্ডিশন আছে? | **না** — score the whole question range as one block. **হ্যাঁ** — split into named subjects, each with its own column range and its own pass mark; a student can fail by missing *any one* subject's pass mark even if their overall percentage clears the total pass %. |
+| সাবজেক্ট ভিত্তিক কন্ডিশন আছে? | **না** — score the whole question range as one block. **হ্যাঁ** — split into named subjects, each [...]
 | প্রশ্নের কলাম রেঞ্জ | (Standard mode only) Spreadsheet column range holding the questions, e.g. `G:DB`. |
 | সাবজেক্ট সংখ্যা + rows | (Subject-wise mode) Name, column range, and pass mark per subject. |
-| অতিরিক্ত মার্ক (লিখিত/হোমওয়ার্ক) | Optional. Toggle on to add a written/homework mark on top of the MCQ score. Choose **Overall** (one combined mark + pass mark) or **Subject-wise** (one mark + pass mark per subject, mirroring the subjects above). This is re-entered/re-confirmed every time you open the wizard — it doesn't silently carry over. |
+| অতিরিক্ত মার্ক (লিখিত/হোমওয়ার্ক) | Optional. Toggle on to add a written/homework mark on top of the MCQ score. Choose **Overall** (one c[...]
 
 Saving triggers the first sync automatically and sets up the automation
 triggers described below.
@@ -144,8 +216,8 @@ triggers described below.
 | 🖨️ Instant Print (Ranking Page) | Generates a landscape PDF of the Ranking Page and opens a download link. |
 | 📄 Instant PDF Report (Download) | Generates a portrait PDF of the detailed per-student report (includes subject breakdowns) and opens a download link. |
 | 📊 Show Statistics | Score distribution, rank-band breakdown, and subject overview charts in a printable dialog. |
-| ❌ Fail/Weak Report (WhatsApp) | Two lists — students who failed overall, and students who passed but are weak in a specific subject — each row has a ready-to-send (editable) WhatsApp message naming the weak subject(s). |
-| 🔁 Reset System Settings | Wipes all saved configuration, cache, and the backup sheet. Use only if you want to reconfigure an exam from a blank slate — you'll need to run Setup again afterward. |
+| ❌ Fail/Weak Report (WhatsApp) | Two lists — students who failed overall, and students who passed but are weak in a specific subject — each row has a ready-to-send (editable) WhatsApp mess[...]
+| 🔁 Reset System Settings | Wipes all saved configuration, cache, and the backup sheet. Use only if you want to reconfigure an exam from a blank slate — you'll need to run Setup again afterw[...]
 
 ### 6. The student-facing portal
 
@@ -162,7 +234,6 @@ and:
    কপি করুন to copy a shareable text summary.
 4. Top-3 and rank-1 finishers get a confetti animation; failing students see
    a motivational message instead of just a bare "FAIL."
-
 
 
 - All UI/PDF text is in Bengali (Anek Bangla / Hind Siliguri fonts); the menu
