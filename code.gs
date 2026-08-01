@@ -1,32 +1,19 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════╗
- * ║         DreamRise Web App — v72.0 (Race-Safe Edition)            ║
+ * ║         DreamRise Web App — v74.0 (Overall Pass-Mark Edition)    ║
  * ║  Developer: Muhammad Ibrahim                                     ║
- * ║  Fixes from v71 (এই আপডেটে):                                     ║
- * ║   ✅ FIXED: "Setup-এ ঠিক ছিল, auto-sync-এর পর নম্বর বদলে গেছে"   ║
- * ║      বাগ — আসল কারণ ছিল calculateAndRank()-এ কোনো LockService    ║
- * ║      ছিল না। বার্স্ট ফর্ম-সাবমিশনে একাধিক calculateAndRank()      ║
- * ║      সমান্তরালে চলে একে অপরের cache/backup write চাপা দিয়ে       ║
- * ║      দিত। এখন পুরো ফাংশনটা LockService দিয়ে serialize করা।       ║
- * ║   ✅ FIXED: computeSingleStudentAndMerge()-এ lost-update race —   ║
- * ║      আগে lock নেওয়ার আগেই পুরনো payload পড়া হতো, দুইজন প্রায়     ║
- * ║      একসাথে সার্চ করলে একজনের merge আরেকজনেরটা মুছে ফেলত। এখন     ║
- * ║      lock নেওয়ার পরে freshly payload আবার পড়া হয়।                ║
- * ║   ✅ FIXED: ফোন-নম্বর normalize এখন সব জায়গায় (dedupe + search)  ║
- * ║      একই ফাংশন normalizePhone() ব্যবহার করে — আগে dedupe পুরো     ║
- * ║      digit-string আর search শেষ ১০ ডিজিট দিয়ে হতো, ফলে একই        ║
- * ║      স্টুডেন্ট দুইভাবে ফোন লিখলে দুইটা আলাদা এন্ট্রি তৈরি হতো।     ║
- * ║   ✅ NEW: Form Submit এখন ৮ সেকেন্ড debounce হয় (আগে প্রতি         ║
- * ║      সাবমিশনে সরাসরি ভারী রিক্যাল্ক চলত) — বার্স্ট সাবমিশনে       ║
- * ║      একবারই চলে, স্পিড বাড়ে + race window কমে।                    ║
- * ║   ✅ NEW: Header-row detection এখন শুধু প্রথম কয়েক row-এ           ║
- * ║      সীমাবদ্ধ (আগে পুরো শীট স্ক্যান করত, ভুল row ধরার ঝুঁকি ছিল)। ║
- * ║   ✅ NEW: Answer Key row-এর নাম বদলে গেলে (শীট সর্ট/এডিট হলে)      ║
- * ║      টোস্ট দিয়ে সতর্ক করে দেয়, silently ভুল স্কোরিং করে না।       ║
- * ║  Fixes from v70/v69/v68 (অপরিবর্তিত, নিচে বহাল আছে):              ║
- * ║   ✅ Auto-Sync on Portal Search, permanent DR_Backup sheet,       ║
- * ║      exact-text answer matching, Exam Summary bar, Logo,          ║
- * ║      multi-page print, Statistics Dialog ইত্যাদি।                 ║
+ * ║  NEW in this update:                                             ║
+ * ║   ✅ NEW: "Overall" মোডের Additional Mark (লিখিত/হোমওয়ার্ক)-এরও   ║
+ * ║      এখন নিজস্ব পাস মার্ক সেট করা যায় — আগে শুধু Subject-wise      ║
+ * ║      মোডে প্রতিটা সাবজেক্টের নিজস্ব পাস মার্ক ছিল, Overall মোডে     ║
+ * ║      কোনো পাস-থ্রেশহোল্ড ছাড়াই শুধু Grand Total percentage দিয়ে    ║
+ * ║      পাস/ফেইল বিচার হতো। এখন Overall Additional Mark যদি তার       ║
+ * ║      নির্দিষ্ট পাস মার্কের নিচে থাকে, সেই ছাত্র সার্বিকভাবে ফেইল     ║
+ * ║      ধরা হবে (Subject-wise মোডের মতোই), এবং Fail/Weak Report-এ    ║
+ * ║      নির্দিষ্টভাবে সেই বিষয়ের নাম উল্লেখ থাকবে।                    ║
+ * ║      calculateAndRank() এবং computeSingleStudentAndMerge() —       ║
+ * ║      দুই জায়গাতেই এই চেক সামঞ্জস্যপূর্ণভাবে যোগ করা হয়েছে, এবং    ║
+ * ║      PDF Report ও পোর্টালেও পাস মার্ক দেখানো হয়।                   ║
  * ╚══════════════════════════════════════════════════════════════════╝
  */
 
@@ -74,6 +61,7 @@ function onOpen(e) {
       .addItem('📄 Instant PDF Report (Download)', 'instantPrintReport')
       .addSeparator()
       .addItem('📊 Show Statistics',               'showStatisticsDialog')
+      .addItem('❌ Fail/Weak Report (WhatsApp)',  'showFailReportDialog')
       .addItem('🔁 Reset System Settings',         'resetSettings')
       .addToUi();
   } catch(x) {
@@ -101,7 +89,16 @@ function saveConfiguration(config) {
       'ansKeyRow':     config.ansKeyRow,
       'isSubjectWise': config.isSubjectWise.toString(),
       'subjectData':   JSON.stringify(config.subjects),
-      'standardRange': config.standardRange || ""
+      'standardRange': config.standardRange || "",
+      // ── Additional Mark (লিখিত/হোমওয়ার্ক) কনফিগারেশন ──
+      // এই সেটিং প্রতি রানে আলাদাভাবে টিক/আনটিক করা যায়; ভুল হলে
+      // Setup Wizard আবার খুলে এডিট করে রি-রান করা যাবে (getSavedConfig()
+      // এখান থেকেই প্রি-ফিল করবে)। additionalOverall-এ এখন name/max-এর
+      // পাশাপাশি "pass" (পাস মার্ক)-ও থাকে।
+      'hasAdditionalMark':  (!!config.hasAdditionalMark).toString(),
+      'additionalMode':     config.additionalMode || "",
+      'additionalOverall':  JSON.stringify(config.additionalOverall || {}),
+      'additionalSubjects': JSON.stringify(config.additionalSubjects || [])
     });
     // নতুন করে সেভ হলে পুরনো "savedAnsKeyName" ভ্যালিডেশন মার্কারও মুছে দাও,
     // যাতে নতুন Answer Key Row-কে ভুল করে "বদলে গেছে" মনে না করে।
@@ -111,6 +108,34 @@ function saveConfiguration(config) {
     return "Success!";
   } catch (e) {
     return "Error: " + e.message;
+  }
+}
+
+/**
+ * Setup Wizard খোলার সময় আগের সেভ করা কনফিগারেশন ফেরত দেয়, যাতে ফর্ম
+ * প্রি-ফিল হয়ে থাকে এবং ভুল হলে এডিট করে আবার রান করা যায়।
+ */
+function getSavedConfig() {
+  try {
+    const props = PropertiesService.getScriptProperties().getProperties();
+    if (!props.examName) return null; // প্রথমবার — কিছু সেভ নেই
+    return {
+      examName:      props.examName,
+      posMark:       parseFloat(props.posMark),
+      negMark:       parseFloat(props.negMark),
+      globalPass:    parseFloat(props.globalPass),
+      ansKeyRow:     props.ansKeyRow,
+      isSubjectWise: props.isSubjectWise === "true",
+      standardRange: props.standardRange || "",
+      subjects:      JSON.parse(props.subjectData || "[]"),
+      hasAdditionalMark:  props.hasAdditionalMark === "true",
+      additionalMode:     props.additionalMode || "",
+      additionalOverall:  JSON.parse(props.additionalOverall || "{}"),
+      additionalSubjects: JSON.parse(props.additionalSubjects || "[]")
+    };
+  } catch (e) {
+    console.error("getSavedConfig failed:", e);
+    return null;
   }
 }
 
@@ -134,19 +159,18 @@ function setupAutomationTriggers() {
       ScriptApp.deleteTrigger(t);
     }
   });
-  // FIXED (v72): Form Submit → এখন সরাসরি calculateAndRank() নয়, বরং একটা
-  // ছোট debounce (দেখুন onFormSubmitThrottled)। আগে প্রতিটা সাবমিশনে
-  // সরাসরি ভারী calculateAndRank() চলত — বার্স্ট সাবমিশনে (যেমন exam শেষে
-  // সবাই একসাথে সাবমিট করলে) একাধিক ইনস্ট্যান্স সমান্তরালে চলে একে অপরের
-  // cache/backup write নষ্ট করে দিত (কোনো Lock ছাড়াই)। এখন এই race window
-  // অনেক ছোট + কাজও দ্রুত হয়।
+  // Form Submit → এখন সরাসরি calculateAndRank() নয়, বরং একটা ছোট
+  // debounce (দেখুন onFormSubmitThrottled)। আগে প্রতিটা সাবমিশনে সরাসরি
+  // ভারী calculateAndRank() চলত — বার্স্ট সাবমিশনে (যেমন exam শেষে সবাই
+  // একসাথে সাবমিট করলে) একাধিক ইনস্ট্যান্স সমান্তরালে চলে একে অপরের
+  // cache/backup write নষ্ট করে দিত। এখন এই race window ছোট + কাজও দ্রুত।
   ScriptApp.newTrigger('onFormSubmitThrottled').forSpreadsheet(ss).onFormSubmit().create();
   // Manual Edit → debounce
   ScriptApp.newTrigger('onEditThrottled').forSpreadsheet(ss).onEdit().create();
 }
 
 /**
- * FORM SUBMIT HANDLER (short debounce) — NEW in v72
+ * FORM SUBMIT HANDLER (short debounce)
  * ---------------------------------------------------
  * প্রতিটা সাবমিশনে সরাসরি ভারী calculateAndRank() চালানোর বদলে, শুধু একটা
  * ছোট (৮ সেকেন্ড) timer রিসেট করে। বার্স্টে যতগুলোই সাবমিশন আসুক, শেষটার
@@ -227,30 +251,19 @@ function colIndexToLetter(n) {
 }
 
 /**
- * FIXED (v72): এখন এটাই একমাত্র জায়গা যেখানে ফোন-নম্বর normalize হয় —
- * সবসময় শেষ ১০ ডিজিট, digit-only। আগে dedupe (calculateAndRank) আর সার্চ
- * (searchStudent/computeSingleStudentAndMerge/findStudentInMinifiedCache)
- * আলাদা আলাদা normalize logic ব্যবহার করত (একটা পুরো digit-string, আরেকটা
- * শেষ ১০ ডিজিট) — ফলে একই স্টুডেন্ট যদি ফোন নম্বর দুইভাবে লেখে
- * (যেমন 01712345678 বনাম +8801712345678), dedupe এদের দুইজন আলাদা
- * স্টুডেন্ট ধরে নিত, অথচ সার্চ পাথ এদের একজনই ধরত — ফলে কোন সাবমিশনটা
- * "canonical" হবে তা নির্ভর করত কোন কোড-পাথ শেষে চলেছে তার উপর, আর নম্বর
- * সিঙ্ক ভেদে পাল্টে যেত। এখন সব জায়গায় এই একই ফাংশন ব্যবহার হয়।
+ * এটাই একমাত্র জায়গা যেখানে ফোন-নম্বর normalize হয় — সবসময় শেষ ১০ ডিজিট,
+ * digit-only। dedupe (calculateAndRank), সার্চ (searchStudent/
+ * computeSingleStudentAndMerge/findStudentInMinifiedCache) — সব জায়গায়
+ * এই একই ফাংশন ব্যবহার হয়, যাতে একই স্টুডেন্ট ভিন্নভাবে ফোন লিখলেও
+ * (01712345678 বনাম +8801712345678) সবসময় একই কী দিয়ে ম্যাচ হয়।
  */
 function normalizePhone(raw) {
   return String(raw || "").trim().replace(/\D/g, '').slice(-10);
 }
 
 /**
- * Multi-answer check.
- * FIXED (v71): আগে এই ফাংশন Answer Key-কে কমা (,) বা স্ল্যাশ (/) দিয়ে ভেঙে
- * একাধিক সঠিক উত্তর সাপোর্ট করার চেষ্টা করত। কিন্তু আসল exam ডেটাতে (Google
- * Form থেকে) MCQ অপশনের পূর্ণ টেক্সটের ভিতরেই স্বাভাবিকভাবে কমা/স্ল্যাশ
- * থাকে (যেমন: "সাপও মরে, লাঠিও না ভাঙ্গে", "টেকনাফ, কক্সবাজার")। ফলে সেই
- * split লজিক সঠিক উত্তরকেও ভুল ভাবে টুকরো করে ফেলত এবং তুলনা মিলত না —
- * এতে বাস্তবের চেয়ে কম "সঠিক" গণনা হতো।
- * এখন Google Sheet formula-র লজিকের (F2:DA2 = F$7:DA$7) সাথে হুবহু মিলিয়ে
- * সরাসরি, সম্পূর্ণ টেক্সট তুলনা (trim + case-insensitive) করা হয়।
+ * Multi-answer check — Google Sheet formula-র লজিকের (F2:DA2 = F$7:DA$7)
+ * সাথে হুবহু মিলিয়ে সরাসরি, সম্পূর্ণ টেক্সট তুলনা (trim + case-insensitive)।
  */
 function isCorrect(studentAns, keyAns) {
   const k = String(keyAns).trim().toUpperCase();
@@ -278,13 +291,11 @@ function findHeaderRowIdx(rawData) {
 function calculateAndRank() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // FIXED (v72): মূল বাগ ফিক্স — এই পুরো ফাংশনটা এখন LockService দিয়ে
-  // serialize করা। আগে এখানে কোনো lock ছিল না, তাই বার্স্ট ফর্ম-সাবমিশনে
+  // এই পুরো ফাংশনটা LockService দিয়ে serialize করা — বার্স্ট ফর্ম-সাবমিশনে
   // একাধিক calculateAndRank() সমান্তরালে চলে একে অপরের cache/backup/
-  // ScriptProperties write চাপা দিয়ে দিত — এটাই ছিল "setup-এ ঠিক ছিল,
-  // auto-sync-এর পর নম্বর বদলে গেছে" সমস্যার আসল কারণ। এখন একসাথে
-  // সর্বোচ্চ একটাই instance চলবে; বাকিরা lock না পেয়ে নিরাপদে skip করবে
-  // (ডেটা হারায় না, কারণ debounce mechanism আবার নতুন রান শিডিউল করে দেয়)।
+  // ScriptProperties write চাপা দেওয়া ঠেকাতে। একসাথে সর্বোচ্চ একটাই
+  // instance চলবে; বাকিরা lock না পেয়ে নিরাপদে skip করবে (ডেটা হারায় না,
+  // কারণ debounce mechanism আবার নতুন রান শিডিউল করে দেয়)।
   const lock = LockService.getScriptLock();
   let gotLock = false;
   try {
@@ -312,6 +323,21 @@ function calculateAndRank() {
     const globalPassPct= parseFloat(props.globalPass)|| 0;
     const ansKeyRowIdx = parseInt(props.ansKeyRow) - 1;
 
+    // ── Additional Mark (লিখিত/হোমওয়ার্ক) কনফিগারেশন ──
+    const hasAddl    = props.hasAdditionalMark === "true";
+    const addlMode   = props.additionalMode || "";               // 'overall' | 'subjectwise'
+    const addlOverall= JSON.parse(props.additionalOverall  || "{}"); // {name, max, pass}
+    const addlSubjects = JSON.parse(props.additionalSubjects || "[]"); // [{name, max, pass}]
+    const addlMaxTotal = !hasAddl ? 0 :
+      (addlMode === 'overall'
+        ? (parseFloat(addlOverall.max) || 0)
+        : addlSubjects.reduce((sum, as) => sum + (parseFloat(as.max) || 0), 0));
+
+    // Ranking Page-এ আগে ম্যানুয়ালি বসানো Additional Mark ভ্যালু থাকলে,
+    // sheet রিবিল্ড হওয়ার আগেই সেগুলো পড়ে নাও — নয়তো রি-রান করলে
+    // ম্যানুয়ালি বসানো নম্বরগুলো হারিয়ে যাবে।
+    const prevAddl = hasAddl ? readPreviousAdditionalMarks(ss, isSubWise, subjects, addlMode, addlSubjects, addlOverall) : {};
+
     // Question columns
     let qCols = new Set();
     if (isSubWise) {
@@ -324,9 +350,9 @@ function calculateAndRank() {
       for (let j = s; j <= e2; j++) qCols.add(j);
     }
 
-    // FIXED (v72): header row এখন শুধু প্রথম কয়েক row-এর মধ্যেই খোঁজা হয় —
-    // পুরো শীট স্ক্যান করলে কোনো ছাত্রের উত্তরে ভুলবশত "name/full/নাম" শব্দ
-    // থাকলে ভুল row-কে header ধরে নেওয়ার ঝুঁকি ছিল।
+    // header row শুধু প্রথম কয়েক row-এর মধ্যেই খোঁজা হয় — পুরো শীট স্ক্যান
+    // করলে কোনো ছাত্রের উত্তরে ভুলবশত "name/full/নাম" শব্দ থাকলে ভুল
+    // row-কে header ধরে নেওয়ার ঝুঁকি ছিল।
     const titleRowIdx = findHeaderRowIdx(rawData);
     if (titleRowIdx === -1) { console.error("Header row not found!"); return; }
     const titleRow = rawData[titleRowIdx];
@@ -349,10 +375,10 @@ function calculateAndRank() {
     const ansKeyName  = String(ansKeyRow[nCol] || "").trim();
     const totalQCount = qCols.size;
 
-    // NEW (v72): Answer Key row বদলে গেছে কিনা যাচাই — শীট ম্যানুয়ালি
-    // সর্ট/এডিট হলে (সাধারণ একটা ভুল) ansKeyRow-এর ফিক্সড row-নাম্বারে এখন
-    // ভিন্ন কেউ চলে আসতে পারে, যা silently পুরো স্কোরিং ভুল করে দেয়।
-    // এখন অন্তত টোস্ট দিয়ে সতর্ক করা হয়, চুপচাপ ভুল হিসাব করে না।
+    // Answer Key row বদলে গেছে কিনা যাচাই — শীট ম্যানুয়ালি সর্ট/এডিট হলে
+    // (সাধারণ একটা ভুল) ansKeyRow-এর ফিক্সড row-নাম্বারে এখন ভিন্ন কেউ চলে
+    // আসতে পারে, যা silently পুরো স্কোরিং ভুল করে দেয়। এখন অন্তত টোস্ট দিয়ে
+    // সতর্ক করা হয়, চুপচাপ ভুল হিসাব করে না।
     const savedAnsKeyName = props.savedAnsKeyName;
     if (savedAnsKeyName && savedAnsKeyName !== ansKeyName) {
       console.error(`⚠️ Answer Key row (row ${ansKeyRowIdx+1}) এর নাম বদলে গেছে! আগে: "${savedAnsKeyName}", এখন: "${ansKeyName}". শীট সর্ট/এডিট হয়ে থাকতে পারে — Setup Wizard-এ Answer Key Row নম্বর যাচাই করুন!`);
@@ -368,9 +394,7 @@ function calculateAndRank() {
       if (i === titleRowIdx || i === ansKeyRowIdx) continue;
       const row  = rawData[i];
       const name = String(row[nCol] || "").trim();
-      // FIXED (v72): normalizePhone() — dedupe আর সার্চ এখন একই normalize
-      // ব্যবহার করে (আগে এখানে পুরো digit-string দিয়ে dedupe হতো, সার্চ
-      // পাথ শেষ ১০ ডিজিট দিয়ে — mismatch হতো)।
+      // normalizePhone() — dedupe আর সার্চ একই normalize ব্যবহার করে
       const rawDigits = String(row[wCol] || "").trim().replace(/\D/g, '');
       if (!name || rawDigits.length < 7) continue;
       const phone = normalizePhone(rawDigits);
@@ -379,6 +403,7 @@ function calculateAndRank() {
       seen.add(phone);
 
       let totalC = 0, totalW = 0, totalScore = 0, subFail = false, subDataForTable = [];
+      let weakSubjects = []; // যেসব সাবজেক্টে স্কোর পাস মার্কের নিচে — Fail Report-এ স্পেসিফিক উল্লেখের জন্য
 
       if (isSubWise) {
         subjects.forEach(sub => {
@@ -394,7 +419,7 @@ function calculateAndRank() {
           }
           const score      = (c * posMark) - (w * negMark);
           const subPassMark= parseFloat(sub.pass) || 0;
-          if (score < subPassMark) subFail = true;
+          if (score < subPassMark) { subFail = true; weakSubjects.push(sub.name); }
           totalC += c; totalW += w; totalScore += score;
           subDataForTable.push(c, w, score.toFixed(2));
         });
@@ -410,10 +435,48 @@ function calculateAndRank() {
       }
 
       const fullMarksPossible = totalQCount * posMark;
-      const isPassed = !subFail && totalScore >= (fullMarksPossible * globalPassPct / 100);
+
+      // ── Additional Mark যোগ করা (আগে ম্যানুয়ালি বসানো ভ্যালু থেকে) ──
+      let addlScore = 0, addlSubFail = false, addlOverallVal = "", addlSubVals = null;
+      let weakAddlSubjects = []; // Additional Mark-এ পাস মার্কের নিচে থাকা সাবজেক্টের (বা Overall বিষয়ের) নাম
+      if (hasAddl) {
+        const prev = prevAddl[phone];
+        if (addlMode === 'overall') {
+          if (prev && typeof prev.overall === 'number') {
+            addlOverallVal = prev.overall;
+            addlScore = prev.overall;
+            // NEW: Overall Additional Mark-এরও এখন নিজস্ব পাস মার্ক চেক হয় —
+            // Subject-wise মোডের মতোই, এই বিষয়ে পাস মার্কের নিচে থাকলে ছাত্র
+            // সার্বিকভাবে ফেইল ধরা হবে (শুধু Grand Total percentage-এর উপর
+            // নির্ভর করে না)।
+            const overallPassMark = parseFloat(addlOverall.pass) || 0;
+            if (prev.overall < overallPassMark) {
+              addlSubFail = true;
+              weakAddlSubjects.push(addlOverall.name || 'Additional');
+            }
+          }
+        } else if (addlMode === 'subjectwise') {
+          addlSubVals = addlSubjects.map((as, i) => {
+            const v = (prev && prev.subs && typeof prev.subs[i] === 'number') ? prev.subs[i] : "";
+            if (typeof v === 'number') {
+              addlScore += v;
+              const asPass = parseFloat(as.pass) || 0;
+              if (v < asPass) { addlSubFail = true; weakAddlSubjects.push(as.name); }
+            }
+            return v;
+          });
+        }
+      }
+
+      const grandTotal   = totalScore + addlScore;
+      const grandFullMax = fullMarksPossible + addlMaxTotal;
+      const isPassed = !subFail && !addlSubFail &&
+        grandTotal >= (grandFullMax * globalPassPct / 100);
+
       if (isPassed) passCount++;
-      if (totalScore > highScore) highScore = totalScore;
-      totalScoreSum += totalScore;
+      const scoreForStats = hasAddl ? grandTotal : totalScore;
+      if (scoreForStats > highScore) highScore = scoreForStats;
+      totalScoreSum += scoreForStats;
 
       const phoneDisplay = phone.length >= 3 ? "********" + phone.slice(-3) : phone;
       students.push({
@@ -423,6 +486,9 @@ function calculateAndRank() {
         subData:      subDataForTable,
         totalC, totalW,
         score:        totalScore,
+        addlOverallVal, addlSubVals, addlScore,
+        grandTotal,
+        weakSubjects, weakAddlSubjects,
         passed:       isPassed
       });
     }
@@ -433,15 +499,17 @@ function calculateAndRank() {
     }
     if (highScore === -Infinity) highScore = 0;
 
-    // Sort: pass > fail, then score desc, then wrong asc (tie-breaker)
+    // Sort: pass > fail, then (grand)score desc, then wrong asc (tie-breaker)
     students.sort((a, b) => {
       if (a.passed !== b.passed) return a.passed ? -1 : 1;
-      if (b.score  !== a.score)  return b.score - a.score;
+      const aScore = hasAddl ? a.grandTotal : a.score;
+      const bScore = hasAddl ? b.grandTotal : b.score;
+      if (bScore !== aScore) return bScore - aScore;
       return a.totalW - b.totalW;
     });
 
-    const fullMarks     = (totalQCount * posMark).toFixed(2);
-    const passThreshold = (totalQCount * posMark * globalPassPct / 100).toFixed(2);
+    const fullMarks     = (totalQCount * posMark + addlMaxTotal).toFixed(2);
+    const passThreshold = ((totalQCount * posMark + addlMaxTotal) * globalPassPct / 100).toFixed(2);
     const meta = {
       examName:      props.examName,
       totalQ:        totalQCount,
@@ -455,7 +523,10 @@ function calculateAndRank() {
       highScore:     highScore.toFixed(2),
       negMark, posMark,
       isSubjectWise: isSubWise,
-      subjects
+      subjects,
+      // ── Additional Mark মেটা — Ranking Page / PDF Report / পোর্টাল রেন্ডারে দরকার ──
+      hasAdditionalMark: hasAddl,
+      addlMode, addlOverall, addlSubjects
     };
 
     renderRankingPage(students, props, subjects, meta);
@@ -471,9 +542,20 @@ function calculateAndRank() {
     // PERMANENT DATA STORAGE
     // ════════════════════════════════════════════════════════════════
     try {
-      const cacheStudents = students.map(s => [
-        s.name, s.district, s.phone, s.totalC, s.totalW, s.score, s.passed ? 1 : 0, s.subData
-      ]);
+      // ── প্রতিটা স্টুডেন্টের Additional Mark ডেটা (থাকলে) মিনিফাইড অ্যারেতে যোগ ──
+      // index 8 = Grand Total, index 9 = Additional Mark এর কাঁচা ডেটা।
+      const cacheStudents = students.map(s => {
+        let addlData = null;
+        if (hasAddl) {
+          addlData = (addlMode === 'overall')
+            ? { overall: s.addlOverallVal }
+            : { subs: s.addlSubVals || [] };
+        }
+        return [
+          s.name, s.district, s.phone, s.totalC, s.totalW, s.score, s.passed ? 1 : 0, s.subData,
+          s.grandTotal, addlData
+        ];
+      });
       const payload = { s: cacheStudents, m: meta, t: Date.now() };
       const payloadJson = JSON.stringify(payload);
 
@@ -484,6 +566,32 @@ function calculateAndRank() {
       saveBackupSheet(payloadJson);
 
     } catch(x) { console.error("Data persist failed:", x); }
+
+    // ── Fail/Weak Report (WhatsApp) এর জন্য লিস্ট সেভ করা ──
+    // মেনু থেকে "❌ Fail Report" ক্লিক করলে এখান থেকেই লিস্ট দেখানো হবে,
+    // তাই প্রতিবার সিঙ্ক করার সাথেই এটা আপডেট হয়ে যায়। দুই ভাগে রাখা হচ্ছে:
+    // ১) failList — যারা Overall Fail করেছে (নির্দিষ্ট দুর্বল সাবজেক্ট/
+    //    Additional Mark সহ)
+    // ২) weakPassList — যারা Overall Pass করেছে কিন্তু কোনো নির্দিষ্ট
+    //    সাবজেক্টে (বা Additional Mark-এ) পাস মার্কের নিচে আছে, যাতে
+    //    ভালো রেজাল্ট করা স্টুডেন্টের নির্দিষ্ট দুর্বলতা নিয়েও সরাসরি কথা বলা যায়।
+    try {
+      const toEntry = s => ({
+        name:  s.name,
+        phone: s.phone,
+        score: (hasAddl ? s.grandTotal : s.score).toFixed(2),
+        weakSubjects:     s.weakSubjects     || [],
+        weakAddlSubjects: s.weakAddlSubjects || []
+      });
+      const failList     = students.filter(s => !s.passed).map(toEntry);
+      const weakPassList = students.filter(s =>
+        s.passed && ((s.weakSubjects && s.weakSubjects.length) || (s.weakAddlSubjects && s.weakAddlSubjects.length))
+      ).map(toEntry);
+
+      CacheService.getScriptCache().put('failedListMin', JSON.stringify({
+        failList, weakPassList, examName: props.examName, fullMarks: meta.fullMarks, t: Date.now()
+      }), 21600);
+    } catch(x) { console.error("Fail list cache failed:", x); }
 
     try { ss.toast(`✅ সম্পন্ন! ${students.length} জন | পাস: ${passCount}`, 'DreamRise System', 5); } catch(x){}
 
@@ -568,19 +676,100 @@ function scheduleBackgroundSync() {
 }
 
 // ===================== RENDER RANKING PAGE =====================
+/**
+ * Ranking Page-এর হেডার লিস্ট বানায়। renderRankingPage() আর
+ * readPreviousAdditionalMarks() — দুই জায়গাতেই এই ONE ফাংশন ব্যবহার হয়,
+ * যাতে কলামের পজিশন সবসময় ১০০% সামঞ্জস্যপূর্ণ থাকে।
+ */
+function buildRankingHeaders(isSubWise, subjects, hasAddl, addlMode, addlOverall, addlSubjects) {
+  let headers = ["Rank", "Student Name", "District", "WhatsApp"];
+  if (isSubWise) {
+    subjects.forEach(sub => headers.push(sub.name+"(C)", sub.name+"(W)", sub.name+"(S)"));
+  }
+  if (hasAddl && addlMode === 'subjectwise') {
+    addlSubjects.forEach(as => headers.push(as.name + " (Addl)"));
+  }
+  headers.push("Total C", "Total W", hasAddl ? "MCQ Score" : "Score");
+  if (hasAddl) {
+    if (addlMode === 'overall') headers.push(addlOverall.name);
+    headers.push("Grand Total");
+  }
+  headers.push("Result");
+  if (hasAddl) headers.push("_FullPhone_");
+  return headers;
+}
+
+/**
+ * Ranking Page-এ আগে ম্যানুয়ালি বসানো Additional Mark (লিখিত/হোমওয়ার্ক)
+ * ভ্যালুগুলো রি-রানের আগে পড়ে নেয়, যাতে sheet.clear() করার পরেও ডেটা
+ * হারিয়ে না যায় — বরং নতুন Grand Total-এ যোগ হয়ে যায়।
+ *
+ * হেডারের বাংলা টেক্সট মিলিয়ে (headers.indexOf(name)) কলাম না খুঁজে,
+ * buildRankingHeaders()-এর একই লজিক দিয়ে কলামের POSITION হিসাব করা হয় —
+ * টেক্সট যাই থাকুক, পজিশন কখনো ভুল হবে না (যতক্ষণ সাবজেক্ট/মোড অপরিবর্তিত)।
+ */
+function readPreviousAdditionalMarks(ss, isSubWise, subjects, addlMode, addlSubjects, addlOverall) {
+  const map = {};
+  try {
+    const sheet = ss.getSheetByName("Ranking Page");
+    if (!sheet) return map;
+    const lastRow = sheet.getLastRow(), lastCol = sheet.getLastColumn();
+    if (lastRow < 5 || lastCol < 1) return map;
+
+    const expectedHeaders = buildRankingHeaders(isSubWise, subjects, true, addlMode, addlOverall, addlSubjects);
+    const phoneColIdx = expectedHeaders.indexOf("_FullPhone_");
+    if (phoneColIdx === -1 || phoneColIdx >= lastCol) return map;
+
+    // Sanity check: পুরনো শীটে ওই একই পজিশনে সত্যিই "_FullPhone_" আছে কিনা —
+    // থাকলে বুঝি স্ট্রাকচার (সাবজেক্ট/মোড) অপরিবর্তিত, তাই বাকি পজিশনও
+    // বিশ্বাসযোগ্য। না থাকলে (যেমন আগের রানে Additional Mark অফ ছিল),
+    // পুরনো ডেটা trust না করে খালি ম্যাপ ফেরত দাও।
+    const actualHeaderRow = sheet.getRange(4, 1, 1, lastCol).getValues()[0];
+    if (String(actualHeaderRow[phoneColIdx]).trim() !== "_FullPhone_") return map;
+
+    const data = sheet.getRange(5, 1, lastRow - 4, lastCol).getValues();
+
+    if (addlMode === 'overall') {
+      const colIdx = expectedHeaders.indexOf(addlOverall.name);
+      data.forEach(row => {
+        const phone = String(row[phoneColIdx] || "").trim();
+        if (!phone) return;
+        const v = parseFloat(row[colIdx]);
+        if (!isNaN(v)) map[phone] = { overall: v };
+      });
+    } else if (addlMode === 'subjectwise') {
+      const colIdxs = addlSubjects.map(as => expectedHeaders.indexOf(as.name + " (Addl)"));
+      data.forEach(row => {
+        const phone = String(row[phoneColIdx] || "").trim();
+        if (!phone) return;
+        const subs = colIdxs.map(ci => {
+          if (ci === -1) return "";
+          const v = parseFloat(row[ci]);
+          return isNaN(v) ? "" : v;
+        });
+        map[phone] = { subs };
+      });
+    }
+  } catch (x) {
+    console.error("readPreviousAdditionalMarks failed:", x);
+  }
+  return map;
+}
+
 function renderRankingPage(students, props, subjects, meta) {
   const ss    = SpreadsheetApp.getActiveSpreadsheet();
   let sheet   = ss.getSheetByName("Ranking Page") || ss.insertSheet("Ranking Page");
   sheet.clear();
   sheet.clearNotes();
 
-  // Headers
-  let headers = ["Rank", "Student Name", "District", "WhatsApp"];
-  if (props.isSubjectWise === "true") {
-    subjects.forEach(sub => headers.push(sub.name+"(C)", sub.name+"(W)", sub.name+"(S)"));
-  }
-  headers.push("Total C", "Total W", "Score", "Result");
+  // Headers — buildRankingHeaders() ব্যবহার করা হচ্ছে যাতে readPreviousAdditionalMarks()-এর
+  // সাথে কলাম পজিশন সবসময় ১০০% মিলে যায়।
+  let headers = buildRankingHeaders(
+    props.isSubjectWise === "true", subjects,
+    meta.hasAdditionalMark, meta.addlMode, meta.addlOverall, meta.addlSubjects
+  );
   const COL = headers.length;
+  const resultColIdx = headers.indexOf("Result"); // 0-based, রঙ ঠিক করতে ব্যবহার হবে
 
   // ── Row 1: Logo header — শুধু লোগো ছবি, কোনো টেক্সট নেই ──
   sheet.setRowHeight(1, 72);
@@ -622,7 +811,16 @@ function renderRankingPage(students, props, subjects, meta) {
     const tableData = students.map((s, idx) => {
       let row = [idx+1, s.name, s.district, s.phoneDisplay];
       if (s.subData.length > 0) row.push(...s.subData);
-      row.push(s.totalC, s.totalW, s.score.toFixed(2), s.passed ? "PASS" : "FAIL");
+      if (meta.hasAdditionalMark && meta.addlMode === 'subjectwise' && s.addlSubVals) {
+        row.push(...s.addlSubVals);
+      }
+      row.push(s.totalC, s.totalW, s.score.toFixed(2));
+      if (meta.hasAdditionalMark) {
+        if (meta.addlMode === 'overall') row.push(s.addlOverallVal);
+        row.push(s.grandTotal.toFixed(2));
+      }
+      row.push(s.passed ? "PASS" : "FAIL");
+      if (meta.hasAdditionalMark) row.push(s.phone);
       return row;
     });
 
@@ -633,7 +831,7 @@ function renderRankingPage(students, props, subjects, meta) {
     let bgColors = [], txtColors = [];
     let passIdx = 0;
     tableData.forEach((row, i) => {
-      const isFail = row[COL-1] === "FAIL";
+      const isFail = row[resultColIdx] === "FAIL";
       if (isFail) {
         bgColors.push(Array(COL).fill("#fee2e2"));
         txtColors.push(Array(COL).fill("#991b1b"));
@@ -652,6 +850,12 @@ function renderRankingPage(students, props, subjects, meta) {
 
     sheet.getRange(5,1,tableData.length,1).setFontWeight("bold");
     sheet.getRange(5,2,tableData.length,1).setHorizontalAlignment("left");
+  }
+
+  // "_FullPhone_" কলাম স্টুডেন্টদের দেখানোর দরকার নেই — শুধু রি-রানের সময়
+  // Additional Mark ম্যাচ করার জন্য রাখা, তাই hide করে দেওয়া হচ্ছে।
+  if (meta.hasAdditionalMark) {
+    try { sheet.hideColumns(headers.indexOf("_FullPhone_") + 1); } catch(x) {}
   }
 
   const lastDataRow = 4 + students.length;
@@ -695,7 +899,7 @@ function renderPdfReport(students, props, subjects, meta) {
   let sheet = ss.getSheetByName("PDF Report") || ss.insertSheet("PDF Report");
   sheet.clear();
   sheet.clearNotes();
-  const COL = 8;
+  const COL = meta.hasAdditionalMark ? 9 : 8; // Additional Mark চালু থাকলে একটা Grand Total কলাম যোগ হয়
 
   sheet.setRowHeight(1, 72);
   sheet.getRange(1,1,1,COL).merge()
@@ -724,8 +928,12 @@ function renderPdfReport(students, props, subjects, meta) {
     .setBorder(true,true,true,true,true,true,"#cbd5e1",SpreadsheetApp.BorderStyle.SOLID)
     .setFontFamily("Anek Bangla");
 
+  const pdfHeaders = ["Rank","Student Name","District","WhatsApp","Total C","Total W",
+    meta.hasAdditionalMark ? "MCQ Score" : "Score"];
+  if (meta.hasAdditionalMark) pdfHeaders.push("Grand Total");
+  pdfHeaders.push("Result");
   sheet.getRange(4,1,1,COL)
-    .setValues([["Rank","Student Name","District","WhatsApp","Total C","Total W","Score","Result"]])
+    .setValues([pdfHeaders])
     .setBackground("#0f172a").setFontColor("white").setFontWeight("Bold")
     .setHorizontalAlignment("center").setFontFamily("Anek Bangla");
 
@@ -745,20 +953,45 @@ function renderPdfReport(students, props, subjects, meta) {
     }
     if (!isFail) passIdx++;
 
-    values.push([idx+1, s.name, s.district, s.phoneDisplay,
-                 s.totalC, s.totalW, s.score.toFixed(2), s.passed ? "PASS" : "FAIL"]);
+    let row = [idx+1, s.name, s.district, s.phoneDisplay, s.totalC, s.totalW, s.score.toFixed(2)];
+    let rowColors = ["#000000","#000000","#000000","#64748b","#000000","#000000","#000000"];
+    if (meta.hasAdditionalMark) {
+      row.push(typeof s.grandTotal === 'number' ? s.grandTotal.toFixed(2) : s.grandTotal);
+      rowColors.push("#000000");
+    }
+    row.push(s.passed ? "PASS" : "FAIL");
+    rowColors.push(txtResult);
+
+    values.push(row);
     backgrounds.push(Array(COL).fill(bgHex));
-    fontColors.push(["#000000","#000000","#000000","#64748b",
-                     "#000000","#000000","#000000", txtResult]);
+    fontColors.push(rowColors);
     rowPtr++;
 
+    // ── সাবজেক্ট-ভিত্তিক MCQ ব্রেকডাউন + Additional Mark ডিটেইল লাইন ──
+    let detailParts = [];
     if (props.isSubjectWise === "true" && s.subData.length > 0) {
-      let parts = [];
       subjects.forEach((sub, sIdx) => {
         const c  = s.subData[sIdx*3], w = s.subData[sIdx*3+1], sc = s.subData[sIdx*3+2];
-        parts.push(`${sub.name}: ✔${c} ✘${w} [${sc}] পাস:${parseFloat(sub.pass).toFixed(2)}`);
+        detailParts.push(`${sub.name}: ✔${c} ✘${w} [${sc}] পাস:${parseFloat(sub.pass).toFixed(2)}`);
       });
-      values.push(["","  ↳ "+parts.join(" | "),"","","","","",""]);
+    }
+    if (meta.hasAdditionalMark) {
+      if (meta.addlMode === 'overall') {
+        const v = s.addlOverallVal === "" ? "—" : s.addlOverallVal;
+        // NEW: এখন Overall Additional Mark-এর পাস মার্কও এখানে দেখানো হয়
+        const op = parseFloat(meta.addlOverall.pass || 0).toFixed(2);
+        detailParts.push(`${meta.addlOverall.name}: ${v} (সর্বোচ্চ ${meta.addlOverall.max}, পাস:${op})`);
+      } else if (meta.addlMode === 'subjectwise' && s.addlSubVals) {
+        meta.addlSubjects.forEach((as, i) => {
+          const v = s.addlSubVals[i] === "" ? "—" : s.addlSubVals[i];
+          detailParts.push(`${as.name} (Addl): ${v}/${as.max} পাস:${as.pass}`);
+        });
+      }
+    }
+    if (detailParts.length > 0) {
+      let detailRow = Array(COL).fill("");
+      detailRow[1] = "  ↳ " + detailParts.join(" | ");
+      values.push(detailRow);
       backgrounds.push(Array(COL).fill(bgHex));
       fontColors.push(Array(COL).fill("#475569"));
       mergeRows.push(rowPtr);
@@ -800,7 +1033,10 @@ function renderPdfReport(students, props, subjects, meta) {
     .setFontFamily("Hind Siliguri");
 
   sheet.setFrozenRows(4);
-  [45,180,100,100,55,55,60,60].forEach((w,i) => sheet.setColumnWidth(i+1, w));
+  const pdfColWidths = meta.hasAdditionalMark
+    ? [45,180,100,100,55,55,60,70,60]
+    : [45,180,100,100,55,55,60,60];
+  pdfColWidths.forEach((w,i) => sheet.setColumnWidth(i+1, w));
 }
 
 // ===================== WEB APP: GET EXAM INFO =====================
@@ -832,7 +1068,7 @@ function getExamInfo() {
 // ===================== WEB APP: SEARCH STUDENT =====================
 function searchStudent(phone) {
   try {
-    // FIXED (v72): normalizePhone() ব্যবহার — dedupe-এর সাথে অভিন্ন লজিক
+    // normalizePhone() ব্যবহার — dedupe-এর সাথে অভিন্ন লজিক
     const searchPhone = normalizePhone(phone);
     if (searchPhone.length < 7) return { error: "সঠিক ফোন নম্বর দিন!" };
 
@@ -866,12 +1102,10 @@ function searchStudent(phone) {
 }
 
 /**
- * FIXED (v72): lost-update race ফিক্স — আগে এই ফাংশন caller থেকে পাঠানো
- * (lock নেওয়ার আগে পড়া) payload-কে merge-এর ভিত্তি হিসেবে ব্যবহার করত।
- * দুইজন স্টুডেন্ট প্রায় একই সময়ে সার্চ করলে দুইজনেই একই পুরনো payload
- * পড়ত, তারপর যে পরে lock পেত সে তার merge পুরনো payload-এর উপর ভিত্তি
- * করে সেভ করত — ফলে প্রথমজনের merge করা এন্ট্রি হারিয়ে যেত।
- * এখন lock পাওয়ার পরে payload আবার freshly পড়া হয়, তারপরই merge হয়।
+ * lost-update race ফিক্স করা আছে: caller থেকে পাঠানো (lock নেওয়ার আগে
+ * পড়া) payload-কে merge-এর ভিত্তি না ধরে, lock পাওয়ার পরে payload আবার
+ * freshly পড়া হয়, তারপরই merge হয় — যাতে দুইজন প্রায় একই সময়ে সার্চ
+ * করলে একজনের merge আরেকজনেরটা মুছে না ফেলে।
  */
 function computeSingleStudentAndMerge(searchPhone, payloadHint) {
   const lock = LockService.getScriptLock();
@@ -890,6 +1124,17 @@ function computeSingleStudentAndMerge(searchPhone, payloadHint) {
     const negMark         = parseFloat(props.negMark)  || 0;
     const globalPassPct  = parseFloat(props.globalPass)|| 0;
     const ansKeyRowIdx   = parseInt(props.ansKeyRow) - 1;
+
+    // ── Additional Mark কনফিগারেশন (calculateAndRank()-এর সাথে সামঞ্জস্যপূর্ণ) ──
+    const hasAddl      = props.hasAdditionalMark === "true";
+    const addlMode     = props.additionalMode || "";
+    const addlOverall  = JSON.parse(props.additionalOverall  || "{}");
+    const addlSubjects = JSON.parse(props.additionalSubjects || "[]");
+    const addlMaxTotal = !hasAddl ? 0 :
+      (addlMode === 'overall'
+        ? (parseFloat(addlOverall.max) || 0)
+        : addlSubjects.reduce((sum, as) => sum + (parseFloat(as.max) || 0), 0));
+    const prevAddl = hasAddl ? readPreviousAdditionalMarks(ss, isSubWise, subjects, addlMode, addlSubjects, addlOverall) : {};
 
     let qCols = new Set();
     if (isSubWise) {
@@ -962,10 +1207,39 @@ function computeSingleStudentAndMerge(searchPhone, payloadHint) {
 
     const totalQCount       = qCols.size;
     const fullMarksPossible = totalQCount * posMark;
-    const isPassed = !subFail && totalScore >= (fullMarksPossible * globalPassPct / 100);
     const name    = String(matchRow[nCol]).trim();
     const phone   = normalizePhone(matchRow[wCol]);
     const district = dCol !== -1 ? String(matchRow[dCol] || "N/A").trim() : "N/A";
+
+    // ── এই ফাংশনেও bulk sync-এর মতোই Additional Mark যোগ করা হচ্ছে —
+    // NEW: Overall মোডেও এখানে পাস মার্ক চেক করা হয়, calculateAndRank()-এর
+    // সাথে সামঞ্জস্যপূর্ণ রাখতে।
+    let addlScore = 0, addlSubFail = false, addlOverallVal = "", addlSubVals = null;
+    if (hasAddl) {
+      const prev = prevAddl[phone];
+      if (addlMode === 'overall') {
+        if (prev && typeof prev.overall === 'number') {
+          addlOverallVal = prev.overall;
+          addlScore = prev.overall;
+          if (prev.overall < (parseFloat(addlOverall.pass) || 0)) addlSubFail = true;
+        }
+      } else if (addlMode === 'subjectwise') {
+        addlSubVals = addlSubjects.map((as, i) => {
+          const v = (prev && prev.subs && typeof prev.subs[i] === 'number') ? prev.subs[i] : "";
+          if (typeof v === 'number') {
+            addlScore += v;
+            if (v < (parseFloat(as.pass) || 0)) addlSubFail = true;
+          }
+          return v;
+        });
+      }
+    }
+    const grandTotal   = totalScore + addlScore;
+    const grandFullMax = fullMarksPossible + addlMaxTotal;
+    const isPassed = !subFail && !addlSubFail && grandTotal >= (grandFullMax * globalPassPct / 100);
+    const addlData = hasAddl
+      ? (addlMode === 'overall' ? { overall: addlOverallVal } : { subs: addlSubVals || [] })
+      : null;
 
     // Lock নাও — এরপরই payload freshly পড়ো, merge করো, তারপর save করো।
     gotLock = lock.tryLock(DR_LOCK_WAIT_MS);
@@ -973,31 +1247,37 @@ function computeSingleStudentAndMerge(searchPhone, payloadHint) {
 
     let students = freshPayload ? freshPayload.s.slice() : [];
     students = students.filter(s => normalizePhone(s[2]) !== phone); // safety dedupe
-    students.push([name, district, phone, totalC, totalW, totalScore, isPassed ? 1 : 0, subDataForTable]);
+    students.push([name, district, phone, totalC, totalW, totalScore, isPassed ? 1 : 0, subDataForTable,
+                   grandTotal, addlData]);
 
+    const rankScore = s => (hasAddl && typeof s[8] === 'number') ? s[8] : s[5];
     students.sort((a, b) => {
       const aPass = a[6] === 1, bPass = b[6] === 1;
       if (aPass !== bPass) return aPass ? -1 : 1;
-      if (b[5] !== a[5]) return b[5] - a[5];
+      const bs = rankScore(b), as_ = rankScore(a);
+      if (bs !== as_) return bs - as_;
       return a[4] - b[4];
     });
 
     let passCount = 0, highScore = -Infinity, sum = 0;
     students.forEach(s => {
       if (s[6] === 1) passCount++;
-      if (s[5] > highScore) highScore = s[5];
-      sum += s[5];
+      const sc = rankScore(s);
+      if (sc > highScore) highScore = sc;
+      sum += sc;
     });
 
     const baseMeta = freshPayload ? Object.assign({}, freshPayload.m) : {
       examName:      props.examName,
       totalQ:        totalQCount,
-      fullMarks:     fullMarksPossible.toFixed(2),
+      fullMarks:     (fullMarksPossible + addlMaxTotal).toFixed(2),
       passPercent:   globalPassPct,
-      passThreshold: (fullMarksPossible * globalPassPct / 100).toFixed(2),
+      passThreshold: (grandFullMax * globalPassPct / 100).toFixed(2),
       negMark, posMark,
       isSubjectWise: isSubWise,
-      subjects
+      subjects,
+      hasAdditionalMark: hasAddl,
+      addlMode, addlOverall, addlSubjects
     };
     baseMeta.examinees = students.length;
     baseMeta.passCount = passCount;
@@ -1032,8 +1312,8 @@ function findStudentInMinifiedCache(cacheObj, searchPhone) {
   const students = cacheObj.s, meta = cacheObj.m;
   const examinees = students.length;
   for (let i = 0; i < students.length; i++) {
-    const s = students[i]; // [name,district,phone,totalC,totalW,score,passFlag,subData]
-    // FIXED (v72): normalizePhone() দিয়ে তুলনা — dedupe-এর সাথে অভিন্ন লজিক
+    const s = students[i]; // [name,district,phone,totalC,totalW,mcqScore,passFlag,subData,grandTotal,addlData]
+    // normalizePhone() দিয়ে তুলনা — dedupe-এর সাথে অভিন্ন লজিক
     if (normalizePhone(s[2]) !== searchPhone) continue;
     const rank = i+1;
     let subjects = [];
@@ -1048,20 +1328,144 @@ function findStudentInMinifiedCache(cacheObj, searchPhone) {
         });
       });
     }
+
+    // ── Additional Mark (লিখিত/হোমওয়ার্ক) ব্রেকডাউন পোর্টালের জন্য বানানো ──
+    let additional = null;
+    const hasAddl  = meta.hasAdditionalMark;
+    if (hasAddl) {
+      const ad = s[9] || {};
+      if (meta.addlMode === 'overall') {
+        const val = (ad.overall !== undefined && ad.overall !== "" && ad.overall !== null) ? ad.overall : null;
+        additional = {
+          mode: 'overall',
+          name: meta.addlOverall ? meta.addlOverall.name : 'Additional',
+          max:  meta.addlOverall ? meta.addlOverall.max  : 0,
+          // NEW: পাস মার্কও পোর্টালের জন্য পাঠানো হয়
+          pass: meta.addlOverall ? (meta.addlOverall.pass || 0) : 0,
+          value: val
+        };
+      } else if (meta.addlMode === 'subjectwise') {
+        additional = {
+          mode: 'subjectwise',
+          subs: (meta.addlSubjects||[]).map((as,j) => ({
+            name: as.name, max: as.max, pass: as.pass,
+            value: (ad.subs && ad.subs[j] !== undefined && ad.subs[j] !== "" && ad.subs[j] !== null) ? ad.subs[j] : null
+          }))
+        };
+      }
+    }
+    const grandTotal = (typeof s[8] === 'number') ? s[8] : parseFloat(s[5]);
+
     return {
       success:true, rank, name:s[0], district:s[1],
       score:parseFloat(s[5]).toFixed(2), result:s[6]===1?"PASS":"FAIL",
       totalCorrect:s[3], totalWrong:s[4],
       percentile:(((examinees-rank+1)/examinees)*100).toFixed(2),
-      subjects, meta
+      subjects, meta,
+      hasAdditionalMark: !!hasAddl,
+      additional,
+      grandTotal: grandTotal.toFixed(2)
     };
   }
   return null;
 }
 
 /**
- * showStatisticsDialog() — অপরিবর্তিত (v68 থেকে)
+ * ফেইল করা স্টুডেন্টদের নাম + WhatsApp নম্বর সহ একটা লিস্ট Dialog-এ দেখায়।
+ * প্রতিটার পাশে একটা বাটন থাকে যেটাতে ক্লিক করলে সরাসরি সেই স্টুডেন্টের
+ * WhatsApp নম্বরে একটা রেডি (কিন্তু এডিটেবল) মেসেজ সহ চ্যাট খুলে যায়,
+ * যাতে সহজে যোগাযোগ করে জানা যায় কেন খারাপ করেছে আর কীভাবে ভালো করা যায়।
+ * ডেটা আসে calculateAndRank()-এর সবশেষ রান থেকে ক্যাশ করা ফেইল-লিস্ট থেকে।
  */
+function showFailReportDialog() {
+  const ui = SpreadsheetApp.getUi();
+  const cached = CacheService.getScriptCache().get('failedListMin');
+  if (!cached) {
+    ui.alert('⚠️ কোনো ডেটা পাওয়া যায়নি। আগে "🔄 Manual Sync Ranking" চালিয়ে নিন, তারপর আবার চেষ্টা করুন।');
+    return;
+  }
+
+  const payload      = JSON.parse(cached);
+  const failList     = payload.failList     || payload.list || []; // পুরনো cache ফরম্যাটের সাথেও ব্যাকওয়ার্ড-কম্প্যাটিবল
+  const weakPassList = payload.weakPassList || [];
+
+  if (failList.length === 0 && weakPassList.length === 0) {
+    ui.alert('🎉 সবাই ভালো করেছে — কোনো ফেইল বা দুর্বল সাবজেক্ট পাওয়া যায়নি!');
+    return;
+  }
+
+  /** একজন স্টুডেন্টের দুর্বল সাবজেক্টগুলো নিয়ে একটা ছোট বাংলা বাক্যাংশ বানায় */
+  function weakSubjectPhrase(s) {
+    const names = [...(s.weakSubjects || []), ...(s.weakAddlSubjects || [])];
+    if (names.length === 0) return '';
+    if (names.length === 1) return `বিশেষ করে "${names[0]}" বিষয়ে`;
+    return `বিশেষ করে "${names.join('", "')}" — এই বিষয়গুলোতে`;
+  }
+
+  function buildRow(s, i, isFail) {
+    const waNumber = "880" + s.phone; // বাংলাদেশ কান্ট্রি কোড + normalize করা ১০ ডিজিট নম্বর
+    const weakPhrase = weakSubjectPhrase(s);
+
+    let message;
+    if (isFail) {
+      message = weakPhrase
+        ? `আসসালামু আলাইকুম ${s.name}, আমরা "${payload.examName}" পরীক্ষার রেজাল্ট নিয়ে তোমার সাথে কথা বলতে চাই। তোমার নম্বর (${s.score}/${payload.fullMarks}) প্রত্যাশিত অনুযায়ী হয়নি, ${weakPhrase} দুর্বলতা দেখা যাচ্ছে — কোথায় সমস্যা হচ্ছে জানাও, আমরা একসাথে বসে ঠিক করে নেব কীভাবে ভালো করা যায়।`
+        : `আসসালামু আলাইকুম ${s.name}, আমরা "${payload.examName}" পরীক্ষার রেজাল্ট নিয়ে তোমার সাথে কথা বলতে চাই। তোমার নম্বর (${s.score}/${payload.fullMarks}) প্রত্যাশিত অনুযায়ী হয়নি — কোথায় সমস্যা হচ্ছে জানাও, আমরা একসাথে বসে ঠিক করে নেব কীভাবে ভালো করা যায়।`;
+    } else {
+      message = `আসসালামু আলাইকুম ${s.name}, তুমি "${payload.examName}" পরীক্ষায় সার্বিকভাবে ভালো করেছ (${s.score}/${payload.fullMarks}) — অভিনন্দন! তবে ${weakPhrase} একটু পিছিয়ে আছ বলে মনে হচ্ছে। এই বিষয়ে(গুলোতে) আলাদা মনোযোগ দিলে সার্বিক ফলাফল আরও ভালো হবে — কথা বলে জেনে নিতে চাই কোথায় আটকাচ্ছ।`;
+    }
+
+    const waLink = `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`;
+    return `
+      <tr>
+        <td style="padding:8px;border-bottom:1px solid #e2e8f0;">${i+1}</td>
+        <td style="padding:8px;border-bottom:1px solid #e2e8f0;">${s.name}</td>
+        <td style="padding:8px;border-bottom:1px solid #e2e8f0;">${s.score}/${payload.fullMarks}</td>
+        <td style="padding:8px;border-bottom:1px solid #e2e8f0;">${weakPhrase ? weakPhrase.replace(/^বিশেষ করে /,'') : '—'}</td>
+        <td style="padding:8px;border-bottom:1px solid #e2e8f0;">${s.phone}</td>
+        <td style="padding:8px;border-bottom:1px solid #e2e8f0;">
+          <a href="${waLink}" target="_blank"
+             style="background:#25D366;color:white;padding:6px 12px;border-radius:6px;text-decoration:none;font-weight:600;">
+             WhatsApp
+          </a>
+        </td>
+      </tr>`;
+  }
+
+  function buildTable(list, isFail) {
+    if (list.length === 0) return '<p style="color:#64748b;">কেউ নেই।</p>';
+    const rows = list.map((s, i) => buildRow(s, i, isFail)).join('');
+    return `
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:#0f172a;color:white;">
+            <th style="padding:8px;">#</th><th style="padding:8px;">নাম</th>
+            <th style="padding:8px;">মার্ক</th><th style="padding:8px;">দুর্বল বিষয়</th>
+            <th style="padding:8px;">নম্বর</th><th style="padding:8px;">যোগাযোগ</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  const html = `
+    <div style="font-family:'Anek Bangla',sans-serif;padding:10px;">
+      <p style="margin-bottom:10px;">নিচের WhatsApp বাটনে ক্লিক করলে সরাসরি চ্যাট খুলে যাবে, নির্দিষ্ট দুর্বল
+      বিষয় উল্লেখ করেই মেসেজ আগে থেকে লেখা থাকবে (চাইলে পাঠানোর আগে এডিট করতে পারবেন)।</p>
+
+      <h3 style="margin:15px 0 8px;color:#991b1b;">❌ Overall Fail করেছে (${failList.length} জন)</h3>
+      ${buildTable(failList, true)}
+
+      <h3 style="margin:20px 0 8px;color:#b45309;">⚠️ Pass করেছে কিন্তু নির্দিষ্ট বিষয়ে দুর্বল (${weakPassList.length} জন)</h3>
+      ${buildTable(weakPassList, false)}
+    </div>`;
+
+  ui.showModalDialog(
+    HtmlService.createHtmlOutput(html).setWidth(750).setHeight(550),
+    `📋 Fail / Weak Subject Report — ${payload.examName}`
+  );
+}
+
 function showStatisticsDialog() {
   try {
     const payload = getStudentDataPayload();
