@@ -4,18 +4,13 @@ DreamRise is a Google Apps Script + Google Sheets system for running competitive
 admission exams: it scores MCQ answer sheets (with optional per-subject rules and
 negative marking), optionally adds written/homework marks, builds a ranking
 sheet and a printable PDF report, and publishes a phone-number-searchable
-result portal as a public web app. It can also generate a separate, branded
-**Answer Key & Explanation** sheet for a Google Form-based MCQ exam, so
-students can check their own answers after the exam ends.
+result portal as a public web app.
 
 **Live logo/branding assets:** hosted in this repo (`Logo_For_Light.png`,
 `Logo_For_Dark.png`) and referenced directly by URL from the script, so the
 same logo updates everywhere (Setup Wizard, Ranking Page, PDF Report,
-Statistics dialog, Answer Key sheet, and the result portal) the moment the
-files here are replaced. **Note:** GitHub's raw-file links are case-sensitive
-— the constants in `Code.gs` (`DR_LOGO_LIGHT_URL`, `DR_LOGO_DARK_URL`) must
-match each file's name exactly, including case, or the logo silently fails
-to load (shows as broken/missing) everywhere it's used.
+Statistics dialog, and the result portal) the moment the files here are
+replaced.
 
 ## Features
 
@@ -34,16 +29,6 @@ to load (shows as broken/missing) everywhere it's used.
   breakdown, per-subject **and** per-Additional-Mark pass/fail badges (so a
   specific weak subject is impossible to miss), confetti for top ranks, a
   motivational banner for fails, and a print/PDF button.
-- **Answer Key & Explanation Sheet** — a separate flow, independent of the
-  scoring system above: pulls MCQ questions (up to ~100) straight from a
-  Google Form into an "Answer Setup" sheet — auto-filling correct answers
-  and explanations if the Form is in Quiz mode — then renders a branded,
-  printable Answer Key (correct answers highlighted, per-question
-  explanations, question numbering can be hidden/revealed) that opens
-  directly in a dialog and saves to PDF via the browser's print, with no
-  Drive/Doc file created. Its marking-scheme line (correct/negative
-  marks, total questions) always reflects whatever is configured in the
-  main Setup Wizard, so it can't drift out of sync with the exam.
 - **Fail/Weak Report** — a WhatsApp-ready outreach list, split into students
   who failed overall and students who passed but are weak in a specific
   subject, each with a pre-written (editable) message naming the weak
@@ -58,10 +43,10 @@ to load (shows as broken/missing) everywhere it's used.
 
 | File | Purpose |
 |---|---|
-| `Code.gs` | All server-side logic: scoring engine, ranking/report rendering, web app endpoints, triggers, statistics, fail report, and the Answer Key/explanation sheet. |
+| `Code.gs` | All server-side logic: scoring engine, ranking/report rendering, web app endpoints, triggers, statistics, fail report. |
 | `SetupUI.html` | Modal dialog (Setup Wizard) for configuring an exam: marks, answer key row, subjects, Additional Mark. |
 | `webapp.html` | The public-facing result portal (`doGet`), including the pass/fail badge UI and print/PDF styling. |
-| `Logo_For_Light.png` / `Logo_For_Dark.png` | Brand logos referenced by URL from the script — replacing these files updates the logo everywhere. File names are case-sensitive; keep them exactly as-is. |
+| `Logo_For_Light.png` / `Logo_For_Dark.png` | Brand logos referenced by URL from the script — replacing these files updates the logo everywhere. |
 
 ## Setup (new spreadsheet)
 
@@ -90,190 +75,6 @@ go live. Server-side-only changes (`Code.gs`, `SetupUI.html`) that don't
 touch `doGet()` output take effect immediately for menu actions, but a new
 deployment is still the safest way to make sure everything is in sync.
 
-## Auto-deploy (Windows) — Optional
-
-This repository includes a simple helper script (`Auto-Deploy.bat`) that
-automates linking a local copy of the project to an existing Google Apps
-Script project and pushing the files using `clasp`. Use this if you prefer
-editing files locally (or from this repo clone) and want one-command deploys
-from Windows.
-
-Prerequisites
-
-- Windows 10/11 (PowerShell/CMD) with internet access.
-- Git (optional, for cloning the repo).
-- An existing Google Apps Script project (or create one in the Apps Script
-  editor) — you will need its *Script ID* (Apps Script editor → Project
-  Settings → Script ID).
-
-How to use Auto-Deploy.bat
-
-1. Clone or download this repository to your Windows machine and open the
-   folder in File Explorer.
-2. Double-click `Auto-Deploy.bat` (or run it from a CMD/PowerShell window).
-3. Follow the prompts:
-   - If you press ENTER for Project Path the script uses the current folder.
-   - Enter the Apps Script *Script ID* when prompted. (Get it from the
-     Apps Script editor: Project Settings → Script ID.)
-   - The script will create a small `dreamrise_config.txt` file to remember
-     the project path and Script ID for subsequent runs.
-4. When asked, allow the script to run `clasp login` to authenticate with
-   your Google account (this opens a browser window to sign in).
-5. The script writes a `.clasp.json` file with the provided Script ID and
-   runs `clasp push --force` to deploy the current local files into the
-   linked Apps Script project.
-
-Notes & Troubleshooting
-
-- The batch file attempts to install Node.js via `winget` if Node is missing
-  and installs `@google/clasp` globally if `clasp` is not present. You may
-  prefer to install Node.js and clasp manually (Node.js installer from
-  nodejs.org; `npm install -g @google/clasp`).
-- If `winget` is not available on your Windows machine, install Node.js
-  manually and rerun the batch file.
-- If `clasp push` fails with authorization errors, run `clasp login` from a
-  terminal, follow the browser login steps, and then re-run the batch file.
-- The script writes `.clasp.json` in the project path. If you already have
-  a `.clasp.json`, the script will overwrite it with the provided Script ID;
-  be cautious if that file contained other settings.
-- After clasp pushes files to Apps Script, remember to create a new
-  deployment version in the Apps Script editor (Deploy → Manage deployments)
-  if you want the web app URL/version updated for public users.
-
-Alternative: manual clasp workflow
-
-If you prefer to deploy manually without the batch script, here are the
-commands (run from the project folder):
-
-```bash
-# Install clasp (if not already installed)
-npm install -g @google/clasp
-
-# Authenticate (one-time)
-clasp login
-
-# Create or link to an existing project (linking example)
-# Create .clasp.json with the scriptId or run:
-# echo {"scriptId":"<YOUR_SCRIPT_ID>"} > .clasp.json
-
-# Push files to the linked Apps Script project
-clasp push --force
-```
-
-Replace `<YOUR_SCRIPT_ID>` with your Apps Script project's Script ID.
-
-## How to Use
-
-### 1. Prepare the response sheet
-
-The **first sheet** of the spreadsheet is the source of truth. It needs:
-
-- A **header row** (within the first 5 rows) containing a name column
-  (matches "নাম" / "name" / "student"), a phone column (matches "whatsapp" /
-  "phone" / "মোবাইল" / "contact"), and optionally a district/college column
-  (matches "জেলা" / "district" / "college" / "বিভাগ").
-- An **Answer Key row** — one row where the name column contains something
-  like "Answer Key" and the question columns contain the correct answers.
-  Any row works as long as you tell the Setup Wizard its row number.
-- One row per student with their answers in the same question columns.
-
-This is normally just a Google Form response sheet, with one extra manual
-row added for the answer key.
-
-### 2. Run the Setup Wizard (🚀 DreamRise System → ⚙️ Full System Setup)
-
-| Field | What it does |
-|---|---|
-| পরীক্ষার নাম (Exam name) | Shown on the Ranking Page, PDF Report, and portal. |
-| সঠিক মার্ক (+) / ভুল (নেগেটিভ) | Marks awarded per correct answer / deducted per wrong answer. Also the marks shown on the Answer Key sheet (see below) — it always follows these values. |
-| অ্যানসার কী রো নম্বর | The spreadsheet row number (1-based) containing the answer key. |
-| সামগ্রিক পাস মার্ক (Total Pass %) | The percentage of the (grand) full marks a student needs to pass overall. |
-| সাবজেক্ট ভিত্তিক কন্ডিশন আছে? | **না** — score the whole question range as one block. **হ্যাঁ** — split into named subjects, each [...]
-| প্রশ্নের কলাম রেঞ্জ | (Standard mode only) Spreadsheet column range holding the questions, e.g. `G:DB`. |
-| সাবজেক্ট সংখ্যা + rows | (Subject-wise mode) Name, column range, and pass mark per subject. |
-| অতিরিক্ত মার্ক (লিখিত/হোমওয়ার্ক) | Optional. Toggle on to add a written/homework mark on top of the MCQ score. Choose **Overall** (one c[...]
-
-Saving triggers the first sync automatically and sets up the automation
-triggers described below.
-
-### 3. Enter marks after the exam
-
-- **MCQ**: happens automatically as students submit the Google Form (see
-  Automation below).
-- **Additional Mark (written/homework)**: after the first sync, open the
-  **Ranking Page** sheet and manually type marks into the Additional Mark
-  column(s) for each student, then run **🔄 Manual Sync Ranking** again from
-  the menu. The script reads what you typed before rebuilding the sheet, so
-  nothing is lost — it folds your entries into the new Grand Total and
-  re-checks pass/fail (including the Additional Mark's own pass mark, if
-  set).
-
-### 4. Automation (happens without you doing anything)
-
-- **New form submission** → recalculates automatically a few seconds after
-  the last submission in a burst (so many students submitting at once
-  doesn't trigger dozens of overlapping recalculations).
-- **Editing the Answer Key row** → recalculates immediately.
-- **Editing a student's answers** → recalculates ~30 seconds later (bulk
-  edits don't each trigger a separate run).
-- **A student searching the portal** → if the cached data is more than a
-  minute old, a background sync is scheduled automatically; if their exact
-  row isn't found in the sync yet, the portal computes their result
-  directly from the source sheet as a fallback, so they never see a stale
-  "not found."
-
-### 5. Menu reference (🚀 DreamRise System)
-
-| Menu item | What it does |
-|---|---|
-| ⚙️ Full System Setup | Opens the Setup Wizard (see above). |
-| 🔄 Manual Sync Ranking | Re-scores everyone from scratch right now — use after entering Additional Marks, or any time you want an immediate refresh. |
-| 🖨️ Instant Print (Ranking Page) | Generates a landscape PDF of the Ranking Page and opens a download link. |
-| 📄 Instant PDF Report (Download) | Generates a portrait PDF of the detailed per-student report (includes subject breakdowns) and opens a download link. |
-| 📊 Show Statistics | Score distribution, rank-band breakdown, and subject overview charts in a printable dialog. |
-| ❌ Fail/Weak Report (WhatsApp) | Two lists — students who failed overall, and students who passed but are weak in a specific subject — each row has a ready-to-send (editable) WhatsApp mess[...]
-| 🔁 Reset System Settings | Wipes all saved configuration, cache, and the backup sheet. Use only if you want to reconfigure an exam from a blank slate — you'll need to run Setup again afterw[...]
-| 📘 ফর্ম থেকে প্রশ্ন আনুন (Answer Key) | Pulls MCQ questions (up to ~100) from a linked Google Form into an "Answer Setup" sheet, auto-filling correct answers/explanations if the Form is in Quiz mode. |
-| 📝 Answer Key সেটিংস (নাম/মার্ক) | Sets the exam name shown on the Answer Key sheet. The marking scheme is not set here — it always follows the main Setup Wizard's marks. |
-| 🧮 Answer Key Row অটো বসাও (সোর্স শীটে) | Auto-generates an Answer Key row in the main response sheet from the correct answers set in "Answer Setup", ready to be pointed at by অ্যানসার কী রো নম্বর above. |
-| 📄 Answer Key (দেখুন ও PDF নিন) | Opens the branded, printable Answer Key sheet — correct answers highlighted, explanations shown, question numbering can be hidden/revealed with a toggle. "Print / Download PDF" saves it directly; no Drive/Doc file is created. |
-
-### 6. The student-facing portal
-
-Once deployed as a web app (see Setup step 5 above), students visit the URL
-and:
-
-1. Type their phone number (Bengali or English digits both work) and tap
-   খুঁজুন.
-2. See their rank, score, percentile, and a full breakdown — including a
-   **pass/fail badge on every individual subject and on the Additional
-   Mark**, so a specific weak area is visible immediately rather than
-   requiring them to read raw numbers.
-3. Can tap ডাউনলোড / প্রিন্ট for a clean PDF-style printout, or রেজাল্ট
-   কপি করুন to copy a shareable text summary.
-4. Top-3 and rank-1 finishers get a confetti animation; failing students see
-   a motivational message instead of just a bare "FAIL."
-
-### 7. The Answer Key sheet (separate from scoring)
-
-This is an independent flow for Google Form-based MCQ exams (up to ~100
-questions), for handing students something to check their own answers
-against after the exam ends — it does not feed into the ranking/scoring
-system above unless you explicitly use "Answer Key Row অটো বসাও" to copy its
-correct answers into the main response sheet as an answer-key row.
-
-1. **📘 ফর্ম থেকে প্রশ্ন আনুন** — fetches every question from the linked Form
-   into an "Answer Setup" sheet, one row per question (Correct Answer and
-   Explanation columns auto-filled if the Form is in Quiz mode).
-2. Fill in (or correct) each row's **Correct Answer** (A/B/C/D) and, if you
-   want, an **Explanation**.
-3. **📄 Answer Key (দেখুন ও PDF নিন)** — opens a printable, branded sheet: the
-   marking scheme (from the main Setup Wizard), every question with the
-   correct option highlighted and its explanation (if any), and a
-   "Print / Download PDF" button. A toggle button can hide the question
-   number badge (keeping the "প্রশ্ন" label) for cases where the question
-   text already has its own numbering.
-
 ## Notes
 
 - All UI/PDF text is in Bengali (Anek Bangla / Hind Siliguri fonts); the menu
@@ -287,18 +88,6 @@ correct answers into the main response sheet as an answer-key row.
   race conditions during burst form submissions.
 
 ## Credits
-
-## 📸 Visual Tour (How It Looks)
-
-Here is a quick glimpse of what you are getting out of the box:
-
-<p align="center">
-  <img src="https://via.placeholder.com/600x300?text=Result+Portal+Dashboard+Screenshot" alt="Result Portal" width="48%">
-  <img src="https://via.placeholder.com/600x300?text=Generated+PDF+Report+Screenshot" alt="PDF Report" width="48%">
-</p>
-<p align="center">
-  <em>(Left: Public Result Portal | Right: Auto-Generated PDF Report)</em>
-</p>
 
 Developed by **Muhammad Ibrahim** for DreamRise.
 Facebook: [DreamRise](https://www.facebook.com/dreamriseadmission) ·
