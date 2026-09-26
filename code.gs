@@ -1,26 +1,32 @@
 /**
- * ╔══════════════════════════════════════════════════════════════════╗
- * ║         DreamRise Web App — v74.0 (Overall Pass-Mark Edition)    ║
- * ║  Developer: Muhammad Ibrahim                                     ║
- * ║  NEW in this update:                                             ║
- * ║   ✅ NEW: "Overall" মোডের Additional Mark (লিখিত/হোমওয়ার্ক)-এরও   ║
- * ║      এখন নিজস্ব পাস মার্ক সেট করা যায় — আগে শুধু Subject-wise      ║
- * ║      মোডে প্রতিটা সাবজেক্টের নিজস্ব পাস মার্ক ছিল, Overall মোডে     ║
- * ║      কোনো পাস-থ্রেশহোল্ড ছাড়াই শুধু Grand Total percentage দিয়ে    ║
- * ║      পাস/ফেইল বিচার হতো। এখন Overall Additional Mark যদি তার       ║
- * ║      নির্দিষ্ট পাস মার্কের নিচে থাকে, সেই ছাত্র সার্বিকভাবে ফেইল     ║
- * ║      ধরা হবে (Subject-wise মোডের মতোই), এবং Fail/Weak Report-এ    ║
- * ║      নির্দিষ্টভাবে সেই বিষয়ের নাম উল্লেখ থাকবে।                    ║
- * ║      calculateAndRank() এবং computeSingleStudentAndMerge() —       ║
- * ║      দুই জায়গাতেই এই চেক সামঞ্জস্যপূর্ণভাবে যোগ করা হয়েছে, এবং    ║
- * ║      PDF Report ও পোর্টালেও পাস মার্ক দেখানো হয়।                   ║
- * ╚══════════════════════════════════════════════════════════════════╝
+ * ═══════════════════════════════════════════════════════════
+ *   DreamRise Web App — v85.0
+ *   Developer: Muhammad Ibrahim
+ * ═══════════════════════════════════════════════════════════
+ * Changelog (latest first, short notes):
+ *  - Answer Key PDF: question-number badge can now be hidden/
+ *    revealed with a toggle button (useful when the question
+ *    text already has its own numbering).
+ *  - Answer Key PDF: fixed logo (wrong file-name casing caused
+ *    404s), fixed header/marking-line not repeating on every
+ *    printed page (now uses a real <table><thead>), fixed
+ *    negative-marking override getting stuck from a past exam,
+ *    bigger print font sizes, 2x2 option grid, refreshed look.
+ *  - Removed the separate online-link version of the Answer Key
+ *    (?page=answerkey route + its menu item) — PDF/print dialog
+ *    is now the only way to view it.
+ *  - fetchQuestionsFromForm(): auto-fills correct answers +
+ *    explanations from a Quiz-mode Form (manual entries always
+ *    win); fixed a clearDataValidations() crash.
+ *  - "Overall" mode's Additional Mark now supports its own pass
+ *    mark too (previously only Subject-wise mode did).
+ * ═══════════════════════════════════════════════════════════
  */
 
 // ===================== BRANDING =====================
 // DreamRise লোগো — এখানে একবার বদলালে সব জায়গায় আপডেট হয়ে যাবে।
 // Light UI (Web App light mode) এর জন্য light-background লোগো
-const DR_LOGO_LIGHT_URL = "https://github.com/ibrahimsiddiknasib-glitch/DreamRise/blob/main/Logo_For_Light.png?raw=true";
+const DR_LOGO_LIGHT_URL = "https://github.com/ibrahimsiddiknasib-glitch/DreamRise/blob/main/Logo_For_light.png?raw=true";
 // Dark UI (Web App dark mode) এবং Ranking/PDF header (dark bg) এর জন্য dark-background লোগো
 const DR_LOGO_DARK_URL  = "https://github.com/ibrahimsiddiknasib-glitch/DreamRise/blob/main/Logo_For_Dark.png?raw=true";
 // Default (backward-compat alias — Ranking Page, PDF, Setup Wizard এ dark bg থাকে)
@@ -63,6 +69,11 @@ function onOpen(e) {
       .addItem('📊 Show Statistics',               'showStatisticsDialog')
       .addItem('❌ Fail/Weak Report (WhatsApp)',  'showFailReportDialog')
       .addItem('🔁 Reset System Settings',         'resetSettings')
+      .addSeparator()
+      .addItem('📘 ফর্ম থেকে প্রশ্ন আনুন (Answer Key)', 'fetchQuestionsFromForm')
+      .addItem('📝 Answer Key সেটিংস (নাম/মার্ক)',       'setAnswerKeySettings')
+      .addItem('🧮 Answer Key Row অটো বসাও (সোর্স শীটে)', 'autoGenerateAnswerKeyRow')
+      .addItem('📄 Answer Key (দেখুন ও PDF নিন)',        'showAnswerKeyPdfDialog')
       .addToUi();
   } catch(x) {
     // time-based trigger বা editor-run context — menu দেখানো সম্ভব নয়, skip
@@ -1759,6 +1770,576 @@ function showStatisticsDialog() {
 }
 
 // ===================== WEB APP ENTRY =====================
+// ============================================================
+// 📘 Answer Key & Explanation Publisher
+// ------------------------------------------------------------
+// এই অংশটা তোমার আলাদা Google Form-ভিত্তিক MCQ পরীক্ষা (যেখানে student
+// name/number ম্যাটার করে না) থেকে সরাসরি প্রশ্ন+অপশন টেনে এনে, তুমি শুধু
+// "Correct Answer" আর "Explanation" ভরে দিলেই একটা প্রফেশনাল Answer +
+// Explanation ওয়েব পেজ আর PDF বানিয়ে দেয়। এটা মূল DreamRise
+// exam/ranking সিস্টেম থেকে সম্পূর্ণ আলাদা ডেটা/Properties ব্যবহার করে
+// (ak প্রিফিক্স দিয়ে), তাই একটা আরেকটার সাথে সংঘর্ষ করবে না।
+//
+// PDF জেনারেশন এখন আর Google Doc/Drive বা Sheet-cell রেন্ডার দিয়ে হয় না —
+// showStatisticsDialog()-এর মতোই একটা HTML Dialog দেখানো হয়
+// (showAnswerKeyPdfDialog, নিচে দেখুন), যেখানে window.print() দিয়ে PDF
+// ডাউনলোড করা যায় আর সঠিক উত্তর CSS দিয়ে নির্ভরযোগ্যভাবে হাইলাইট হয়।
+// ============================================================
+
+const AK_SHEET_NAME = 'Answer Setup';
+
+/** Form-এর এডিট/শেয়ার লিংক থেকে Form ID বের করে */
+function extractFormId(url) {
+  url = String(url).trim();
+  if (/\/forms\/d\/e\//.test(url)) {
+    throw new Error('এটা পাবলিক শেয়ার লিংক (viewform) মনে হচ্ছে। ফর্মটা Edit মোডে খুলে ঠিকানার বার থেকে লিংক দাও (…/forms/d/FORM_ID/edit)।');
+  }
+  const m = url.match(/\/forms\/d\/([a-zA-Z0-9_-]+)/);
+  if (m) return m[1];
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(url)) return url; // হয়তো সরাসরি আইডিই পেস্ট করেছে
+  throw new Error('লিংক থেকে Form ID খুঁজে পাওয়া যায়নি। Edit মোডের লিংক (…/edit) দাও।');
+}
+
+/** ফর্ম থেকে সব Multiple Choice প্রশ্ন + অপশন টেনে "Answer Setup" শীটে বসায়।
+ *  আগে থেকে ভরা "Correct Answer" আর "Explanation" প্রশ্নের টেক্সট মিলিয়ে
+ *  সংরক্ষণ করে রাখে, যাতে রি-ফেচ করলেও কাজ হারিয়ে না যায়। */
+function fetchQuestionsFromForm() {
+  const ui = SpreadsheetApp.getUi();
+  const res = ui.prompt(
+    'Google Form-এর Edit লিংক দাও',
+    'ঠিকানার বারে যেটা দেখাবে (…/forms/d/FORM_ID/edit):',
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+
+  let formId;
+  try {
+    formId = extractFormId(res.getResponseText());
+  } catch (e) {
+    ui.alert('⚠️ ' + e.message);
+    return;
+  }
+
+  let form;
+  try {
+    form = FormApp.openById(formId);
+  } catch (e) {
+    ui.alert('⚠️ ফর্মটা খুলতে পারিনি। নিশ্চিত করো: (১) আইডি সঠিক, (২) তুমি এই ফর্মের owner/editor।');
+    return;
+  }
+
+  const items = form.getItems(FormApp.ItemType.MULTIPLE_CHOICE);
+  if (items.length === 0) {
+    ui.alert('⚠️ এই ফর্মে কোনো "Multiple choice" প্রশ্ন পাওয়া যায়নি।');
+    return;
+  }
+
+  // ফর্মটা Quiz মোডে থাকলে (বা এমনকি না থাকলেও, কিছু ক্ষেত্রে API এখনো
+  // ডেটা দেয়) প্রতিটা প্রশ্নের সঠিক উত্তর আর "Correct answer feedback"
+  // টেক্সট বের করার চেষ্টা করা হয় — isQuiz false হলেও চেষ্টা বাদ দেওয়া
+  // হয় না (try/catch দিয়ে সুরক্ষিত), যাতে কোনো এজ-কেসে ডেটা মিস না হয়।
+  // isQuiz শুধু শেষের নোট মেসেজে ব্যবহারকারীকে বোঝানোর জন্য রাখা হয়েছে।
+  let isQuiz = false;
+  try { isQuiz = form.isQuiz(); } catch(x) {}
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(AK_SHEET_NAME);
+
+  const preserved = {}; // প্রশ্নের টেক্সট → আগের Correct/Explanation
+  if (sheet) {
+    const last = sheet.getLastRow();
+    if (last > 1) {
+      sheet.getRange(2, 1, last - 1, 8).getValues().forEach(r => {
+        const q = String(r[1]).trim();
+        if (q) preserved[q] = { correct: r[6], explanation: r[7] };
+      });
+    }
+  } else {
+    sheet = ss.insertSheet(AK_SHEET_NAME);
+  }
+  sheet.clear();
+  // FIXED: clearDataValidations() একটি Range-level মেথড, Sheet-level নয় —
+  // "sheet.clearDataValidations is not a function" এররটা এখান থেকেই
+  // আসছিল। এখন পুরো শীটের ম্যাক্স রো/কলাম নিয়ে একটা Range বানিয়ে সেই
+  // Range-এর উপর কল করা হচ্ছে, যেটা Sheet.clear()-এর সাথে সামঞ্জস্যপূর্ণ
+  // (Sheet.clear() নিজে থেকে data validation মুছে না, তাই এই লাইনটা
+  // দরকার — আগের রানের "Correct Answer" ড্রপডাউন রুল যেন থেকে না যায়)।
+  sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).clearDataValidations();
+
+  const headers = ['Q.No', 'Question', 'Option A', 'Option B', 'Option C', 'Option D',
+                   'Correct Answer (A/B/C/D)', 'Explanation'];
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers])
+    .setBackground('#0f172a').setFontColor('white').setFontWeight('bold');
+
+  const LETTERS = ['A', 'B', 'C', 'D'];
+  let autoCorrectCount = 0, autoExplainCount = 0;
+
+  const rows = items.map((item, i) => {
+    const mc = item.asMultipleChoiceItem();
+    const qText = item.getTitle().trim();
+    const choiceObjs = mc.getChoices();
+    const choices = choiceObjs.map(c => c.getValue());
+    while (choices.length < 4) choices.push('');
+    const old = preserved[qText] || {};
+
+    // choice.isCorrectAnswer() দিয়ে সঠিক উত্তর অটো-ডিটেক্ট — ফর্ম Quiz
+    // না হলে এটা সাধারণত ফাঁকা রিটার্ন করে, তাই স্বাভাবিকভাবেই ফাঁকা
+    // থাকবে। আগে ম্যানুয়ালি বসানো মান (old.correct) সবসময় প্রাধান্য পাবে।
+    let autoCorrect = '';
+    try {
+      const idx = choiceObjs.findIndex(c => c.isCorrectAnswer());
+      if (idx !== -1) autoCorrect = LETTERS[idx] || '';
+    } catch(x) {}
+
+    // ব্যাখ্যা দুই জায়গা থেকে খোঁজা হয় — যেটা আগে পাওয়া যায় সেটাই নেওয়া
+    // হয়, যাতে ফর্ম Quiz মোডে থাকুক বা না থাকুক, ব্যাখ্যা মিস না যায়:
+    //  ১) Quiz ফিচারের "Correct answer feedback" (Quiz মোডে থাকলেই শুধু)
+    //  ২) প্রশ্নের নিচে বসানো Description/Help text ("Add description"
+    //     দিয়ে বসানো, Quiz মোড লাগে না — বেশিরভাগ শিক্ষক এটাই ব্যবহার করেন)
+    // এখানেও ম্যানুয়াল এন্ট্রিই (old.explanation) সবসময় সবার আগে থাকবে।
+    let autoExplain = '';
+    try {
+      const fb = mc.getFeedbackForCorrectAnswers();
+      if (fb) autoExplain = String(fb.getText() || '').trim();
+    } catch(x) {}
+    if (!autoExplain) {
+      try {
+        autoExplain = String(item.getHelpText() || '').trim();
+      } catch(x) {}
+    }
+
+    const finalCorrect = old.correct || autoCorrect || '';
+    const finalExplain = old.explanation || autoExplain || '';
+    if (!old.correct && autoCorrect) autoCorrectCount++;
+    if (!old.explanation && autoExplain) autoExplainCount++;
+
+    return [i + 1, qText, choices[0], choices[1], choices[2], choices[3],
+            finalCorrect, finalExplain];
+  });
+  sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+
+  const rule = SpreadsheetApp.newDataValidation().requireValueInList(['A', 'B', 'C', 'D'], true).build();
+  sheet.getRange(2, 7, rows.length, 1).setDataValidation(rule);
+
+  sheet.setColumnWidth(1, 50);
+  sheet.setColumnWidth(2, 320);
+  for (let c = 3; c <= 6; c++) sheet.setColumnWidth(c, 150);
+  sheet.setColumnWidth(7, 100);
+  sheet.setColumnWidth(8, 320);
+  sheet.setFrozenRows(1);
+  sheet.getRange(2, 1, rows.length, headers.length).setWrap(true).setVerticalAlignment('top');
+
+  let autoNote;
+  if (autoCorrectCount > 0 || autoExplainCount > 0) {
+    autoNote = `\n\nঅটো-ফিল হয়েছে: সঠিক উত্তর ${autoCorrectCount}টা, ব্যাখ্যা ${autoExplainCount}টা। বাকিগুলো (আর দরকার হলে অটো-ফিল হওয়াগুলোও) হাতে ঠিক করে নিতে পারো।\n\nটিপস: ব্যাখ্যা গ্যারান্টিভাবে অটো-আসার সবচেয়ে সহজ উপায় — Quiz মোড লাগবে না — প্রতিটা প্রশ্নের নিচে ফর্মেই "⋮ (তিন ডট) > Add description" দিয়ে ব্যাখ্যাটা লিখে রাখা। পরেরবার Fetch করলে সেটাই Explanation কলামে চলে আসবে।`;
+  } else if (!isQuiz) {
+    autoNote = `\n\nℹ️ কোনো প্রশ্নেই সঠিক উত্তর/ব্যাখ্যা অটো-ফিল হয়নি। গ্যারান্টিভাবে ব্যাখ্যা আনার সবচেয়ে সহজ উপায় (Quiz মোড লাগে না) — ফর্মে প্রতিটা প্রশ্নের নিচে "⋮ (তিন ডট) > Add description" দিয়ে ব্যাখ্যাটা লিখে রাখো, পরের বার Fetch করলে এটা Explanation কলামে অটো-আসবে। এছাড়া চাইলে ফর্মে Settings > Quizzes থেকে "Make this a quiz" চালু করে প্রতিটা প্রশ্নে সঠিক উত্তর ও "Add answer feedback" ব্যবহার করেও একই কাজ হয়। আপাতত নিচের কলামগুলো হাতে পূরণ করো।`;
+  } else {
+    autoNote = `\n\nℹ️ ফর্মটা Quiz মোড হলেও কোনো প্রশ্নে সঠিক উত্তর/ফিডব্যাক সেট পাওয়া যায়নি — নিচের কলামগুলো হাতে পূরণ করো।`;
+  }
+  ui.alert(`✅ ${rows.length}টা প্রশ্ন আনা হয়েছে "${AK_SHEET_NAME}" শীটে।${autoNote}\n\nএখন প্রতিটা সারিতে "Correct Answer" (A/B/C/D) আর দরকার হলে "Explanation" পূরণ করো, তারপর মেনু থেকে PDF দেখো/ডাউনলোড করো।`);
+}
+
+function setAnswerKeySettings() {
+  const ui = SpreadsheetApp.getUi();
+  const props = PropertiesService.getScriptProperties();
+
+  const curTitle = props.getProperty('akExamTitle') || '';
+  const r1 = ui.prompt(
+    'Answer Key — পরীক্ষার নাম',
+    `বর্তমান: ${curTitle || '(সেট করা নেই)'}\nনতুন নাম দাও (ফাঁকা রাখলে আগেরটাই থাকবে):`,
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (r1.getSelectedButton() !== ui.Button.OK) return;
+  const title = r1.getResponseText().trim();
+  if (title) props.setProperty('akExamTitle', title);
+
+  // মার্ক (পজিটিভ/নেগেটিভ) এখানে আলাদাভাবে সেট করার সুবিধা বাদ দেওয়া
+  // হয়েছে — Answer Key সবসময় "⚙️ Full System Setup"-এ সেভ করা
+  // posMark/negMark থেকেই নেবে, যাতে প্রতিটা পরীক্ষায় সঠিক, আপ-টু-ডেট
+  // মার্কিং স্কিম দেখায়। মার্ক বদলাতে হলে মূল Setup Wizard থেকেই বদলাও।
+  ui.alert('✅ সেভ হয়েছে! (পজিটিভ/নেগেটিভ মার্ক এখন থেকে সবসময় "Full System Setup"-এর মানই ব্যবহার করবে।)');
+}
+
+/** "Answer Setup" শীট পড়ে structured array রিটার্ন করে */
+function getAnswerData() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(AK_SHEET_NAME);
+  if (!sheet) return [];
+  const last = sheet.getLastRow();
+  if (last < 2) return [];
+  const letterToIndex = { A: 0, B: 1, C: 2, D: 3 };
+  return sheet.getRange(2, 1, last - 1, 8).getValues()
+    .filter(r => String(r[1]).trim() !== '')
+    .map(r => ({
+      qno: r[0],
+      question: String(r[1]).trim(),
+      options: [r[2], r[3], r[4], r[5]].map(o => String(o || '').trim()),
+      correctIndex: letterToIndex[String(r[6]).trim().toUpperCase()] !== undefined
+        ? letterToIndex[String(r[6]).trim().toUpperCase()] : -1,
+      explanation: String(r[7] || '').trim()
+    }));
+}
+
+/**
+ * "Answer Setup"-এ ঠিক করা সঠিক উত্তরগুলো (Correct Answer A/B/C/D) থেকে
+ * মূল রেসপন্স শীটে (প্রথম শীট — যেটা calculateAndRank() স্কোরিং-এর জন্য
+ * ব্যবহার করে) একটা "Answer Key" রো অটো-জেনারেট করে একদম শেষে বসিয়ে দেয়।
+ * আগে এই কাজটা ম্যানুয়ালি — প্রতিটা প্রশ্নের সঠিক অপশনের হুবহু টেক্সট
+ * রেসপন্স শীটে গিয়ে প্রতিটা কলামে বসাতে হতো — এখন একবার Answer Setup-এ
+ * সঠিক উত্তর ঠিক করলেই এই ফাংশন দিয়ে অটো বসানো যায়।
+ *
+ * কীভাবে মেলায়: Google Form-ভিত্তিক রেসপন্স শীটে প্রতিটা কলামের হেডার
+ * টেক্সট = ফর্মের প্রশ্নের টাইটেল। তাই Answer Setup-এর প্রশ্নের টেক্সট আর
+ * রেসপন্স শীটের হেডার রো হুবহু (ট্রিম করে) মিলিয়ে কলাম পজিশন বের করা হয় —
+ * তাই এই দুটো একই Google Form থেকে আসা দরকার।
+ */
+function autoGenerateAnswerKeyRow() {
+  const ui = SpreadsheetApp.getUi();
+  const data = getAnswerData();
+  if (data.length === 0) {
+    ui.alert('⚠️ কোনো প্রশ্ন পাওয়া যায়নি — আগে "ফর্ম থেকে প্রশ্ন আনুন" চালাও এবং প্রতিটা প্রশ্নের সঠিক উত্তর ঠিক করো।');
+    return;
+  }
+  const missing = data.filter(q => q.correctIndex === -1);
+  if (missing.length > 0) {
+    const qnos = missing.map(q => q.qno).slice(0, 15).join(', ') + (missing.length > 15 ? '...' : '');
+    ui.alert(`⚠️ ${missing.length}টা প্রশ্নে এখনো সঠিক উত্তর সেট করা নেই (Q.No: ${qnos}) — "Answer Setup" শীটে গিয়ে সব প্রশ্নে সঠিক উত্তর ঠিক করে আবার চেষ্টা করো।`);
+    return;
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sourceSheet = ss.getSheets()[0];
+  const rawData = sourceSheet.getDataRange().getValues();
+  if (rawData.length === 0) {
+    ui.alert('⚠️ মূল রেসপন্স শীটে (প্রথম শীট) কোনো ডেটা পাওয়া যায়নি।');
+    return;
+  }
+
+  const titleRowIdx = findHeaderRowIdx(rawData);
+  if (titleRowIdx === -1) {
+    ui.alert('⚠️ মূল শীটের প্রথম কয়েক রো-তে হেডার (নাম/ফোন কলাম) খুঁজে পাওয়া যায়নি।');
+    return;
+  }
+  const headerRow = rawData[titleRowIdx];
+  const lastCol   = headerRow.length;
+
+  // প্রশ্নের টেক্সট → কলাম index ম্যাপ (হেডার টেক্সট ট্রিম করে মিলিয়ে)
+  const colByQuestion = {};
+  headerRow.forEach((h, j) => {
+    const key = String(h || '').trim();
+    if (key) colByQuestion[key] = j;
+  });
+
+  const newRow = Array(lastCol).fill('');
+  let matched = 0;
+  const unmatched = [];
+  data.forEach(q => {
+    const colIdx = colByQuestion[q.question];
+    if (colIdx === undefined) { unmatched.push(q.qno); return; }
+    newRow[colIdx] = q.options[q.correctIndex];
+    matched++;
+  });
+
+  // নাম/ফোন কলাম বসানো — যাতে calculateAndRank()-এর হেডার-ডিটেকশন এই
+  // রোটাকে সাধারণ স্টুডেন্ট রো হিসেবে ভুল না করে (ফোন নম্বর অন্তত ৭ ডিজিট
+  // না হলে dedupe/scoring লজিক রো-টা বাদ দিয়ে দেয়)।
+  let nCol = -1, wCol = -1;
+  headerRow.forEach((h, j) => {
+    const head = String(h).toLowerCase();
+    if (nCol === -1 && /নাম|name|student/i.test(head)) nCol = j;
+    if (wCol === -1 && /whatsapp|phone|মোবাইল|contact/i.test(head)) wCol = j;
+  });
+  const akExamTitle = PropertiesService.getScriptProperties().getProperty('akExamTitle') || 'Answer Key';
+  if (nCol !== -1) newRow[nCol] = akExamTitle;
+  if (wCol !== -1) newRow[wCol] = '0000000000';
+
+  const insertRowNum = rawData.length + 1; // একদম শেষ রো
+  sourceSheet.getRange(insertRowNum, 1, 1, lastCol).setValues([newRow]);
+
+  let msg = `✅ ${matched}টা প্রশ্নের সঠিক উত্তর বসানো হয়েছে সোর্স শীটের ${insertRowNum} নম্বর রো-তে।`;
+  if (unmatched.length > 0) {
+    const qnos = unmatched.slice(0, 15).join(', ') + (unmatched.length > 15 ? '...' : '');
+    msg += `\n\n⚠️ ${unmatched.length}টা প্রশ্নের কলাম মেলেনি (Q.No: ${qnos}) — সম্ভবত প্রশ্নের টেক্সট আর রেসপন্স শীটের কলাম হেডার হুবহু মিলছে না (দুটো ভিন্ন ফর্ম থেকে হলে এমন হতে পারে); ওই ঘরগুলো ফাঁকা রাখা হয়েছে, ম্যানুয়ালি ঠিক করে নাও।`;
+  }
+  msg += `\n\nএখন "⚙️ Full System Setup" খুলে "Answer Key Row" নম্বর হিসেবে ${insertRowNum} বসিয়ে সেভ করলেই এই রোটা স্কোরিং-এর Answer Key হিসেবে ব্যবহৃত হবে।`;
+  ui.alert(msg);
+}
+
+/** HTML-এ বসানোর আগে বেসিক escape — প্রশ্ন/অপশনে "&","<",">","\"" থাকলে
+ *  markup ভেঙে না যায় সেজন্য। */
+function _akEscapeHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * <img src="external-url"> মাঝে মাঝে Dialog খোলার সময় বা প্রিন্ট/PDF
+ * এক্সপোর্টের সময় লোড হয় না — নেটওয়ার্ক টাইমিং বা হটলিংক রেসট্রিকশনের
+ * কারণে (বিশেষ করে GitHub-এর raw লিংকে), যার ফলে লোগো একেবারেই দেখা
+ * যায় না। এটা এড়াতে লোগো ছবিটা সার্ভার-সাইডে ফেচ করে base64 data URI
+ * হিসেবে HTML-এর ভেতরেই এমবেড করে দেওয়া হয় — এরপর আর কোনো বাইরের
+ * রিকোয়েস্টের উপর নির্ভর করতে হয় না, তাই Dialog-এ এবং প্রিন্ট/PDF-এ
+ * সবসময় নির্ভরযোগ্যভাবে দেখা যাবে। ফলাফল ৬ ঘণ্টার জন্য cache করা থাকে
+ * (বারবার fetch এড়াতে); fetch ব্যর্থ হলে মূল URL-ই fallback হিসেবে
+ * ফেরত দেওয়া হয় (তখনো অন্তত চেষ্টা করে, একেবারে ভাঙা না দেখিয়ে)।
+ */
+function _akLogoDataUri(url) {
+  const cacheKey = 'akLogoDataUri_' + Utilities.base64EncodeWebSafe(url).slice(0, 40);
+  try {
+    const cached = CacheService.getScriptCache().get(cacheKey);
+    if (cached) return cached;
+  } catch(x) {}
+  try {
+    const resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
+    if (resp.getResponseCode() !== 200) return url;
+    const blob = resp.getBlob();
+    const mime = blob.getContentType() || 'image/png';
+    const dataUri = 'data:' + mime + ';base64,' + Utilities.base64Encode(blob.getBytes());
+    try { CacheService.getScriptCache().put(cacheKey, dataUri, 21600); } catch(x) {}
+    return dataUri;
+  } catch(x) {
+    console.error('_akLogoDataUri failed:', x);
+    return url;
+  }
+}
+
+/**
+ * "Answer Setup"-এর ডেটা দিয়ে DreamRise লোগো/কালার স্কিমে একটা
+ * প্রিন্ট-রেডি HTML পেজ বানিয়ে Dialog-এ দেখায় — ঠিক showStatisticsDialog()-এর
+ * মতোই (কমপ্যাক্ট topbar-এ লোগো + টাইটেল, নিচে ব্র্যান্ড-ব্লু অ্যাকসেন্ট
+ * বর্ডার, window.print() দিয়ে PDF ডাউনলোড)। হেডারটা
+ * display:table-header-group ট্রিক দিয়ে প্রিন্ট/PDF-এর প্রতিটা পেজেই
+ * রিপিট হয়, আর কার্ডগুলো কমপ্যাক্ট রাখা হয়েছে যাতে পেজের নিচে বেশি ফাঁকা
+ * জায়গা না থাকে। CSS ক্লাস দিয়ে হাইলাইট করা হয় বলে সঠিক উত্তর সবসময়
+ * নির্ভরযোগ্যভাবে সবুজ হাইলাইট হয়, আর কোনো Google Doc/Drive ফাইলও তৈরি
+ * হয় না।
+ */
+/**
+ * Answer Key-এর মার্ক আলাদাভাবে সেট করার (akPosMark/akNegMark) সুবিধাটা
+ * বাদ দেওয়া হয়েছে — এটাই বাগের আসল কারণ ছিল: একবার আলাদা করে সেট করলে
+ * সেই মান স্ক্রিপ্ট প্রপার্টিতে চিরস্থায়ীভাবে রয়ে যেত এবং পরবর্তী প্রতিটা
+ * পরীক্ষায়, মূল Setup Wizard-এ নতুন নেগেটিভ মার্ক দিলেও, সেই পুরনো
+ * override-ই প্রাধান্য পেয়ে ভুল তথ্য (যেমন "নেগেটিভ মার্কিং নেই") দেখাতো।
+ * এখন থেকে সবসময় সরাসরি মূল Setup Wizard-এ সেভ করা posMark/negMark-ই
+ * ব্যবহার হয়, তাই Answer Key সবসময় বর্তমান পরীক্ষার আসল মার্কিং স্কিম
+ * দেখাবে।
+ */
+function _akSetupMark(key, defaultVal) {
+  const v = PropertiesService.getScriptProperties().getProperty(key);
+  return (v !== null && v !== '' && !isNaN(parseFloat(v))) ? parseFloat(v) : defaultVal;
+}
+
+function showAnswerKeyPdfDialog() {
+  const ui = SpreadsheetApp.getUi();
+  const data = getAnswerData();
+  if (data.length === 0) {
+    ui.alert('⚠️ কোনো প্রশ্ন পাওয়া যায়নি — আগে "ফর্ম থেকে প্রশ্ন আনুন" চালাও, তারপর প্রতিটা প্রশ্নের সঠিক উত্তর নির্বাচন করো।');
+    return;
+  }
+
+  const props      = PropertiesService.getScriptProperties();
+  // পুরনো, এখন-অব্যবহৃত override মুছে দেওয়া হচ্ছে যাতে ভুলবশত কোথাও
+  // রয়ে যাওয়া স্টেল ভ্যালু ভবিষ্যতেও বিভ্রান্তি না ছড়ায়
+  props.deleteProperty('akPosMark');
+  props.deleteProperty('akNegMark');
+  const examTitle  = props.getProperty('akExamTitle') || 'পরীক্ষা';
+  const posMark    = _akSetupMark('posMark', 1);
+  const negMark    = _akSetupMark('negMark', 0);
+  const labels     = ['ক', 'খ', 'গ', 'ঘ'];
+  const noneCorrect = data.filter(q => q.correctIndex === -1).length;
+  const withExplain = data.filter(q => q.explanation).length;
+  const logoSrc    = _akLogoDataUri(DR_LOGO_LIGHT_URL);
+
+  const infoLine = [
+    `সঠিক উত্তর: +${posMark}`,
+    negMark > 0 ? `ভুল উত্তর: −${negMark}` : 'নেগেটিভ মার্কিং নেই',
+    `মোট প্রশ্ন: ${data.length}`
+  ].join('  |  ');
+
+  const cardsHtml = data.map(q => {
+    const optsHtml = q.options.map((opt, i) => {
+      if (!opt) return '';
+      const isCorrect = i === q.correctIndex;
+      return `<div class="opt${isCorrect ? ' correct' : ''}">${labels[i]}) ${_akEscapeHtml(opt)}${isCorrect ? ' ✅' : ''}</div>`;
+    }).join('');
+    const explainHtml = q.explanation
+      ? `<div class="explain"><b>ব্যাখ্যা:</b> ${_akEscapeHtml(q.explanation)}</div>`
+      : '';
+    return `
+      <div class="card">
+        <div class="qhead"><span class="qno">প্রশ্ন <span class="qnum">${q.qno}</span></span><span class="qtext">${_akEscapeHtml(q.question)}</span></div>
+        <div class="opts">${optsHtml}</div>
+        ${explainHtml}
+      </div>`;
+  }).join('');
+
+  const warnHtml = noneCorrect > 0
+    ? `<div class="warn">⚠️ ${noneCorrect}টা প্রশ্নে এখনো সঠিক উত্তর সেট করা নেই — "Answer Setup" শীটে গিয়ে সেগুলো পূরণ করে আবার এই ডায়ালগটা খোলো।</div>`
+    : '';
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  @page { size:A4; margin:14mm 12mm; }
+  * , body { box-sizing:border-box; margin:0; padding:0; font-family:'Anek Bangla',sans-serif; }
+  html, body{ background:#eef2f7; color:#0f172a; font-size:14px; }
+
+  .actions{
+    display:flex; justify-content:flex-end; gap:8px; padding:12px 16px 0; background:#eef2f7;
+  }
+  .pdf-btn{
+    display:inline-flex; align-items:center; gap:6px; background:#0f1f3d; color:#fff;
+    border:1px solid #0f1f3d; padding:8px 16px; border-radius:8px; font-size:12.5px;
+    font-weight:600; cursor:pointer; font-family:inherit;
+  }
+  .pdf-btn:hover{ background:#1e2f52; }
+  .pdf-btn.secondary{ background:#fff; color:#0f1f3d; border:1px solid #cbd5e1; }
+  .pdf-btn.secondary:hover{ background:#f1f5f9; }
+
+  /* ── প্রশ্ন-নম্বর হাইড/রিভিল টগল — শুধু নম্বরটাই (qnum) লুকায়, "প্রশ্ন"
+     লেবেলটা ব্যাজ আকারে সবসময় থেকে যায় (ডিজাইন যেমন ছিল সেটাই বজায়
+     থাকে); body-তে .hide-qno ক্লাস পড়লে টগল হয়, প্রিন্টেও একই আচরণ। ── */
+  body.hide-qno .qnum{ display:none; }
+
+  .warn{
+    background:#fffbeb; border:1px solid #fde68a; color:#92400e; font-size:12.5px;
+    padding:8px 12px; margin:10px 16px 0; border-radius:8px;
+  }
+
+  /* ── আসল <table>/<thead> দিয়ে হেডার রিপিট — আগে div + table-header-group
+     ব্যবহার হতো, কিন্তু ভেতরে display:flex (topbar) থাকায় Chrome-এর একটা
+     পরিচিত বাগে প্রিন্টের সময় হেডার রিপিট না হয়ে একবারই দেখাচ্ছিল। এখন
+     সরাসরি <table><thead> — যা <thead>-এর ডিফল্ট আচরণেই প্রতিটা প্রিন্ট
+     পেজে নির্ভরযোগ্যভাবে রিপিট হয় — আর হেডারের ভেতরের লে-আউটও flex বাদ
+     দিয়ে সাব-টেবিল দিয়ে করা হয়েছে, যাতে থিড-এর ভেতরের কনটেন্ট রিপিট সব
+     ব্রাউজারে/PDF এক্সপোর্টে সমানভাবে কাজ করে। ── */
+  table.sheet{ width:100%; border-collapse:collapse; }
+  table.sheet > thead > tr > th{ padding:0; text-align:left; font-weight:normal; }
+  table.sheet > tbody > tr > td{ padding:0; vertical-align:top; }
+
+  table.topbar{ width:100%; border-collapse:collapse; background:#fff; border-bottom:3px solid #2563eb; }
+  table.topbar td{ padding:14px 16px; vertical-align:middle; }
+  table.topbar .logocell{ width:1%; white-space:nowrap; }
+  table.topbar img.logo{ height:48px; width:auto; display:block; }
+  table.topbar .dividercell{ width:1px; background:#e2e8f0; padding:0; }
+  table.topbar .infocell{ text-align:left; padding-left:16px; }
+  .ttitle{ color:#0f1f3d; font-weight:800; font-size:17px; line-height:1.4; letter-spacing:.2px; }
+  .tsub{ color:#2563eb; font-size:13px; margin-top:6px; font-weight:700; line-height:1.5; }
+
+  .body{ padding:16px 16px 24px; }
+  .card{
+    background:#fff; border:1px solid #e2e8f0; border-left:4px solid #2563eb; border-radius:8px;
+    padding:12px 14px; margin-bottom:10px;
+  }
+  .qhead{ display:flex; align-items:flex-start; gap:8px; font-weight:700; margin-bottom:9px; font-size:15px; line-height:1.5; }
+  .qhead .qno{
+    flex-shrink:0; background:#eff6ff; color:#1d4ed8; font-weight:800; font-size:12.5px;
+    border-radius:6px; padding:3px 9px; white-space:nowrap;
+  }
+  .qhead .qtext{ padding-top:2px; }
+  .opts{ display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+  .opt{
+    padding:8px 10px; border-radius:6px; font-size:14px; line-height:1.4;
+    border:1px solid transparent; background:#f8fafc; color:#1e293b;
+  }
+  .opt.correct{
+    background:#dcfce7; color:#166534; font-weight:700; border-color:#16a34a;
+  }
+  .explain{
+    margin-top:9px; padding:8px 11px; border-radius:6px;
+    background:#f1f5f9; font-size:13px; line-height:1.55; color:#475569;
+  }
+  .explain b{ color:#0f172a; }
+  .footer{
+    text-align:center; color:#94a3b8; font-size:12px; padding:14px;
+  }
+  @media print{
+    html, body{ background:#fff; }
+    .actions{ display:none; }
+    .card{ break-inside:avoid; border:1px solid #e2e8f0 !important; }
+    thead{ display:table-header-group; }
+    tbody tr{ break-inside:avoid; }
+    *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+
+    /* ── প্রিন্ট/PDF-এ pt এককে নির্দিষ্ট ভৌত সাইজ — আগে স্ক্রিনের ছোট px
+       ভ্যালুই প্রিন্টে ব্যবহার হতো, তাই আউটপুটে লেখা ছোট আসতো ── */
+    body{ font-size:11.5pt; }
+    .ttitle{ font-size:14pt; }
+    .tsub{ font-size:10.5pt; }
+    .qhead{ font-size:12pt; }
+    .qhead .qno{ font-size:10.5pt; }
+    .opt{ font-size:11.5pt; }
+    .explain{ font-size:10.5pt; }
+    .footer{ font-size:9.5pt; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="actions">
+    <button class="pdf-btn secondary" id="qnoToggleBtn" onclick="toggleQno()">🔢 নম্বর লুকাও</button>
+    <button class="pdf-btn" onclick="window.print()">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="3" y="1" width="10" height="9" rx="1" stroke="white" stroke-width="1.5"/><rect x="1" y="7" width="14" height="7" rx="1" stroke="white" stroke-width="1.5"/><rect x="4" y="11" width="8" height="1.5" rx=".75" fill="white"/></svg>
+      Print / Download PDF
+    </button>
+  </div>
+
+  ${warnHtml}
+
+  <table class="sheet">
+    <thead>
+      <tr><th>
+        <table class="topbar"><tr>
+          <td class="logocell"><img class="logo" src="${logoSrc}" alt="DreamRise"></td>
+          <td class="dividercell"></td>
+          <td class="infocell">
+            <div class="ttitle">${_akEscapeHtml(examTitle.toUpperCase())} — সঠিক উত্তর ও ব্যাখ্যা</div>
+            <div class="tsub">${infoLine}</div>
+          </td>
+        </tr></table>
+      </th></tr>
+    </thead>
+    <tbody>
+      <tr><td>
+        <div class="body">
+          ${cardsHtml}
+          <div class="footer">Developed by DreamRise &amp; Muhammad Ibrahim — ব্যাখ্যা আছে ${withExplain}/${data.length} প্রশ্নে</div>
+        </div>
+      </td></tr>
+    </tbody>
+  </table>
+
+  <script>
+    function toggleQno(){
+      document.body.classList.toggle('hide-qno');
+      var hidden = document.body.classList.contains('hide-qno');
+      document.getElementById('qnoToggleBtn').textContent = hidden ? '🔢 নম্বর দেখাও' : '🔢 নম্বর লুকাও';
+    }
+  </script>
+
+</body>
+</html>`;
+
+  ui.showModalDialog(
+    HtmlService.createHtmlOutput(html).setWidth(760).setHeight(680),
+    '📄 Answer Key — ' + examTitle
+  );
+}
+
+// ── Answer Key-এর অনলাইন-লিংক ভার্সন (AnswerPage.html + এই নির্দেশিকা
+// ফাংশন) সরিয়ে ফেলা হয়েছে — এখন থেকে Answer Key শুধু "📄 Answer Key
+// (দেখুন ও PDF নিন)" ডায়ালগ দিয়েই দেখা/প্রিন্ট/ডাউনলোড হবে। Apps Script
+// এডিটরে গিয়ে AnswerPage.html ফাইলটাও (এই স্ক্রিপ্ট এখন আর সেটা কোথাও
+// ব্যবহার করে না) হাতে ডিলিট করে দিতে পারো, চাইলে।
+
 function doGet(e) {
   return HtmlService.createHtmlOutputFromFile('webapp')
     .setTitle('DreamRise Result Portal')
