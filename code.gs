@@ -1,9 +1,24 @@
 /**
  * ═══════════════════════════════════════════════════════════
- *   DreamRise Web App — v86.0
+ *   DreamRise Web App — v87.0
  *   Developer: Muhammad Ibrahim
  * ═══════════════════════════════════════════════════════════
  * Changelog (latest first, short notes):
+ *  - Answer Key PDF: page number footer at the bottom of every page
+ *    (JS-measured — Chrome print has no native page counter, so
+ *    this is a best-effort estimate, not a true browser page count).
+ *  - Answer Key PDF: blue border frame around every printed page
+ *    (position:fixed — repeats natively per page in Chrome print),
+ *    to make multiple exported PDFs look consistent when merged
+ *    into one book later.
+ *  - Answer Key PDF: "সঠিক উত্তর ও ব্যাখ্যা" title now drops
+ *    "ও ব্যাখ্যা" automatically when not a single question has an
+ *    explanation.
+ *  - Answer Key PDF: "Developed by DreamRise & Muhammad Ibrahim"
+ *    footer credit is now clickable (links to their Facebook pages).
+ *  - fetchQuestionsFromForm() now auto-sets the exam title from the
+ *    Form's own title, instead of requiring a separate manual entry
+ *    in "Answer Key সেটিংস" every time.
  *  - Answer Key PDF: question-number badge can now be hidden/
  *    revealed with a toggle button (useful when the question
  *    text already has its own numbering).
@@ -1800,144 +1815,241 @@ function extractFormId(url) {
   throw new Error('লিংক থেকে Form ID খুঁজে পাওয়া যায়নি। Edit মোডের লিংক (…/edit) দাও।');
 }
 
-/** ফর্ম থেকে সব Multiple Choice প্রশ্ন + অপশন টেনে "Answer Setup" শীটে বসায়।
- *  আগে থেকে ভরা "Correct Answer" আর "Explanation" প্রশ্নের টেক্সট মিলিয়ে
- *  সংরক্ষণ করে রাখে, যাতে রি-ফেচ করলেও কাজ হারিয়ে না যায়। */
+/** এই ফর্মের একটা Section "Answer Setup"-এ আগে থেকে আছে কি না খুঁজে বের করে
+ *  (FormId কলাম মিলিয়ে) — থাকলে {startRow, rowCount, sectionNum}, না
+ *  থাকলে null রিটার্ন করে। */
+function _akFindSectionRows(sheet, formId) {
+  const last = sheet.getLastRow();
+  if (last < 2) return null;
+  const vals = sheet.getRange(2, 9, last - 1, 2).getValues(); // I:FormId, J:Section
+  let startIdx = -1, endIdx = -1, sectionNum = null;
+  for (let i = 0; i < vals.length; i++) {
+    if (String(vals[i][0]) === String(formId) && String(formId) !== '') {
+      if (startIdx === -1) { startIdx = i; sectionNum = vals[i][1]; }
+      endIdx = i;
+    }
+  }
+  if (startIdx === -1) return null;
+  return { startRow: startIdx + 2, rowCount: endIdx - startIdx + 1, sectionNum: sectionNum };
+}
+
+/** পরের নতুন Sectionের নম্বর — বিদ্যমান সব Sectionের সর্বোচ্চ নম্বরের পরেরটা। */
+function _akNextSectionNum(sheet) {
+  const last = sheet.getLastRow();
+  if (last < 2) return 1;
+  const vals = sheet.getRange(2, 10, last - 1, 1).getValues(); // J: Section
+  let max = 0;
+  vals.forEach(r => { const n = Number(r[0]); if (!isNaN(n) && n > max) max = n; });
+  return max + 1;
+}
+
+/** "🚀 DreamRise System" মেনু থেকে চালু হয় — একটা ছোট HTML ডায়ালগ খোলে
+ *  যেখানে একটা টেক্সটএরিয়ায় একটা বা একাধিক Google Form-এর Edit লিংক
+ *  (এক লাইনে একটা) পেস্ট করে একবারে সব Fetch করা যায়। একই ফর্ম থেকে
+ *  পরেও আবার এখান থেকে লিংক যোগ করলে শুধু সেই ফর্মের Sectionটাই আপডেট হয়,
+ *  বাকি ফর্মের প্রশ্ন অক্ষত থাকে (importAnswerKeyForms() দেখো)। */
 function fetchQuestionsFromForm() {
-  const ui = SpreadsheetApp.getUi();
-  const res = ui.prompt(
-    'Google Form-এর Edit লিংক দাও',
-    'ঠিকানার বারে যেটা দেখাবে (…/forms/d/FORM_ID/edit):',
-    ui.ButtonSet.OK_CANCEL
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  * { box-sizing:border-box; }
+  body{ font-family:'Segoe UI',Arial,sans-serif; margin:0; padding:16px; color:#0f172a; background:#f8fafc; }
+  p{ font-size:12.5px; color:#475569; line-height:1.6; margin:0 0 10px; }
+  textarea{
+    width:100%; height:150px; font-family:monospace; font-size:12.5px; padding:10px;
+    border:1px solid #cbd5e1; border-radius:8px; resize:vertical;
+  }
+  .row{ display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+  button{
+    font-family:inherit; font-size:13px; font-weight:600; padding:8px 16px;
+    border-radius:8px; cursor:pointer;
+  }
+  #go{ background:#0f172a; color:#fff; border:1px solid #0f172a; }
+  #go:disabled{ opacity:.6; cursor:default; }
+  #close{ background:#fff; color:#0f172a; border:1px solid #cbd5e1; }
+  #status{ margin-top:12px; font-size:12.5px; white-space:pre-wrap; line-height:1.6; }
+</style></head>
+<body>
+  <p>একটা বা একাধিক Google Form-এর <b>Edit লিংক</b> দাও (…/forms/d/FORM_ID/edit) — একাধিক হলে <b>এক লাইনে একটা</b> করে। প্রতিটা ফর্মের নিজের টাইটেলই তার পরীক্ষার নাম হিসেবে বসবে। আগে থেকে আনা কোনো ফর্মের লিংক আবার দিলে শুধু সেই ফর্মেরটাই আপডেট হবে, বাকিগুলো অক্ষত থাকবে — তাই পরেও এসে নতুন ফর্মের লিংক যোগ করা যাবে।</p>
+  <textarea id="links" placeholder="https://docs.google.com/forms/d/FORM_ID_1/edit
+https://docs.google.com/forms/d/FORM_ID_2/edit"></textarea>
+  <div class="row">
+    <button id="close" onclick="google.script.host.close()">বন্ধ করো</button>
+    <button id="go" onclick="run()">আনুন</button>
+  </div>
+  <div id="status"></div>
+  <script>
+    function run(){
+      var links = document.getElementById('links').value.trim();
+      if (!links) return;
+      document.getElementById('go').disabled = true;
+      document.getElementById('status').textContent = '⏳ আনা হচ্ছে...';
+      google.script.run
+        .withSuccessHandler(function(msg){
+          document.getElementById('status').textContent = msg;
+          document.getElementById('go').disabled = false;
+        })
+        .withFailureHandler(function(err){
+          document.getElementById('status').textContent = '⚠️ ' + (err.message || err);
+          document.getElementById('go').disabled = false;
+        })
+        .importAnswerKeyForms(links);
+    }
+  </script>
+</body></html>`;
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutput(html).setWidth(480).setHeight(400),
+    '📘 ফর্ম থেকে প্রশ্ন আনুন'
   );
-  if (res.getSelectedButton() !== ui.Button.OK) return;
+}
 
-  let formId;
-  try {
-    formId = extractFormId(res.getResponseText());
-  } catch (e) {
-    ui.alert('⚠️ ' + e.message);
-    return;
-  }
-
-  let form;
-  try {
-    form = FormApp.openById(formId);
-  } catch (e) {
-    ui.alert('⚠️ ফর্মটা খুলতে পারিনি। নিশ্চিত করো: (১) আইডি সঠিক, (২) তুমি এই ফর্মের owner/editor।');
-    return;
-  }
-
-  const items = form.getItems(FormApp.ItemType.MULTIPLE_CHOICE);
-  if (items.length === 0) {
-    ui.alert('⚠️ এই ফর্মে কোনো "Multiple choice" প্রশ্ন পাওয়া যায়নি।');
-    return;
-  }
-
-  // ফর্মটা Quiz মোডে থাকলে (বা এমনকি না থাকলেও, কিছু ক্ষেত্রে API এখনো
-  // ডেটা দেয়) প্রতিটা প্রশ্নের সঠিক উত্তর আর "Correct answer feedback"
-  // টেক্সট বের করার চেষ্টা করা হয় — isQuiz false হলেও চেষ্টা বাদ দেওয়া
-  // হয় না (try/catch দিয়ে সুরক্ষিত), যাতে কোনো এজ-কেসে ডেটা মিস না হয়।
-  // isQuiz শুধু শেষের নোট মেসেজে ব্যবহারকারীকে বোঝানোর জন্য রাখা হয়েছে।
-  let isQuiz = false;
-  try { isQuiz = form.isQuiz(); } catch(x) {}
+/** fetchQuestionsFromForm()-এর ডায়ালগ থেকে google.script.run দিয়ে কল হয়।
+ *  একাধিক লিংক (এক লাইনে একটা) নিয়ে প্রতিটার জন্য: ফর্মের সব Multiple
+ *  Choice প্রশ্ন + অপশন টেনে "Answer Setup" শীটে বসায় — নিজের একটা
+ *  Section হিসেবে (ডিভাইডার রো + প্রশ্নগুলো), Q.No "Section.প্রশ্ন" ফরম্যাটে
+ *  (যেমন ২.৩)। আগে থেকে এই ফর্মের Section থাকলে সেই একই জায়গায় রিবিল্ড
+ *  হয় (আগে ভরা Correct/Explanation সংরক্ষিত থেকে যায়), না থাকলে নতুন
+ *  Section নম্বর নিয়ে একদম শেষে যোগ হয়। রিটার্ন ভ্যালু ডায়ালগে দেখানো
+ *  স্ট্যাটাস মেসেজ (প্রতিটা ফর্মের নাম + কতটা প্রশ্ন এলো/আপডেট হলো)। */
+function importAnswerKeyForms(linksText) {
+  const links = String(linksText || '').split('\n').map(s => s.trim()).filter(Boolean);
+  if (links.length === 0) return 'কোনো লিংক দেওয়া হয়নি।';
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(AK_SHEET_NAME);
+  const isNewSheet = !sheet;
+  if (isNewSheet) sheet = ss.insertSheet(AK_SHEET_NAME);
 
-  const preserved = {}; // প্রশ্নের টেক্সট → আগের Correct/Explanation
-  if (sheet) {
-    const last = sheet.getLastRow();
-    if (last > 1) {
-      sheet.getRange(2, 1, last - 1, 8).getValues().forEach(r => {
+  const headers = ['Q.No', 'Question', 'Option A', 'Option B', 'Option C', 'Option D',
+                    'Correct Answer (A/B/C/D)', 'Explanation', 'FormId', 'Section', 'ExamTitle'];
+  if (isNewSheet || sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers])
+      .setBackground('#0f172a').setFontColor('white').setFontWeight('bold');
+    sheet.setFrozenRows(1);
+    sheet.setColumnWidth(1, 55);
+    sheet.setColumnWidth(2, 320);
+    for (let c = 3; c <= 6; c++) sheet.setColumnWidth(c, 150);
+    sheet.setColumnWidth(7, 100);
+    sheet.setColumnWidth(8, 320);
+    // FormId/Section/ExamTitle — মানুষের দেখার দরকার নেই, শুধু কোড ব্যবহার করে
+    try { sheet.hideColumns(9, 3); } catch (x) {}
+    // FIXED: clearDataValidations() একটি Range-level মেথড, Sheet-level নয়
+    sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).clearDataValidations();
+  }
+
+  const LETTERS = ['A', 'B', 'C', 'D'];
+  const results = [];
+
+  links.forEach(link => {
+    let formId;
+    try {
+      formId = extractFormId(link);
+    } catch (e) {
+      results.push(`⚠️ "${link}" — ${e.message}`);
+      return;
+    }
+
+    let form;
+    try {
+      form = FormApp.openById(formId);
+    } catch (e) {
+      results.push(`⚠️ "${link}" — ফর্মটা খুলতে পারিনি (আইডি ভুল বা তুমি owner/editor না)।`);
+      return;
+    }
+
+    const items = form.getItems(FormApp.ItemType.MULTIPLE_CHOICE);
+    if (items.length === 0) {
+      results.push(`⚠️ "${form.getTitle()}" — কোনো Multiple choice প্রশ্ন পাওয়া যায়নি।`);
+      return;
+    }
+
+    let isQuiz = false;
+    try { isQuiz = form.isQuiz(); } catch (x) {}
+    const examTitle = String(form.getTitle() || 'পরীক্ষা').trim();
+
+    // আগে থেকেই এই ফর্মের Section থাকলে তার Correct/Explanation সংরক্ষণ
+    // করে রেখে সেই একই পজিশনে রিবিল্ড করা হয় (বাকি Sectionগুলোর ক্রম/ডেটা
+    // অক্ষত থাকে); না থাকলে নতুন Section নম্বর নিয়ে একদম শেষে যোগ হয়।
+    const existing = _akFindSectionRows(sheet, formId);
+    const preserved = {};
+    let sectionNum, insertAt;
+    if (existing) {
+      sectionNum = existing.sectionNum;
+      sheet.getRange(existing.startRow, 1, existing.rowCount, 8).getValues().forEach(r => {
         const q = String(r[1]).trim();
         if (q) preserved[q] = { correct: r[6], explanation: r[7] };
       });
+      sheet.deleteRows(existing.startRow, existing.rowCount);
+      insertAt = existing.startRow;
+    } else {
+      sectionNum = _akNextSectionNum(sheet);
+      insertAt = sheet.getLastRow() + 1;
     }
-  } else {
-    sheet = ss.insertSheet(AK_SHEET_NAME);
-  }
-  sheet.clear();
-  // FIXED: clearDataValidations() একটি Range-level মেথড, Sheet-level নয় —
-  // "sheet.clearDataValidations is not a function" এররটা এখান থেকেই
-  // আসছিল। এখন পুরো শীটের ম্যাক্স রো/কলাম নিয়ে একটা Range বানিয়ে সেই
-  // Range-এর উপর কল করা হচ্ছে, যেটা Sheet.clear()-এর সাথে সামঞ্জস্যপূর্ণ
-  // (Sheet.clear() নিজে থেকে data validation মুছে না, তাই এই লাইনটা
-  // দরকার — আগের রানের "Correct Answer" ড্রপডাউন রুল যেন থেকে না যায়)।
-  sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).clearDataValidations();
 
-  const headers = ['Q.No', 'Question', 'Option A', 'Option B', 'Option C', 'Option D',
-                   'Correct Answer (A/B/C/D)', 'Explanation'];
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers])
-    .setBackground('#0f172a').setFontColor('white').setFontWeight('bold');
+    let autoCorrectCount = 0, autoExplainCount = 0;
+    const dataRows = items.map((item, i) => {
+      const mc = item.asMultipleChoiceItem();
+      const qText = item.getTitle().trim();
+      const choiceObjs = mc.getChoices();
+      const choices = choiceObjs.map(c => c.getValue());
+      while (choices.length < 4) choices.push('');
+      const old = preserved[qText] || {};
 
-  const LETTERS = ['A', 'B', 'C', 'D'];
-  let autoCorrectCount = 0, autoExplainCount = 0;
-
-  const rows = items.map((item, i) => {
-    const mc = item.asMultipleChoiceItem();
-    const qText = item.getTitle().trim();
-    const choiceObjs = mc.getChoices();
-    const choices = choiceObjs.map(c => c.getValue());
-    while (choices.length < 4) choices.push('');
-    const old = preserved[qText] || {};
-
-    // choice.isCorrectAnswer() দিয়ে সঠিক উত্তর অটো-ডিটেক্ট — ফর্ম Quiz
-    // না হলে এটা সাধারণত ফাঁকা রিটার্ন করে, তাই স্বাভাবিকভাবেই ফাঁকা
-    // থাকবে। আগে ম্যানুয়ালি বসানো মান (old.correct) সবসময় প্রাধান্য পাবে।
-    let autoCorrect = '';
-    try {
-      const idx = choiceObjs.findIndex(c => c.isCorrectAnswer());
-      if (idx !== -1) autoCorrect = LETTERS[idx] || '';
-    } catch(x) {}
-
-    // ব্যাখ্যা দুই জায়গা থেকে খোঁজা হয় — যেটা আগে পাওয়া যায় সেটাই নেওয়া
-    // হয়, যাতে ফর্ম Quiz মোডে থাকুক বা না থাকুক, ব্যাখ্যা মিস না যায়:
-    //  ১) Quiz ফিচারের "Correct answer feedback" (Quiz মোডে থাকলেই শুধু)
-    //  ২) প্রশ্নের নিচে বসানো Description/Help text ("Add description"
-    //     দিয়ে বসানো, Quiz মোড লাগে না — বেশিরভাগ শিক্ষক এটাই ব্যবহার করেন)
-    // এখানেও ম্যানুয়াল এন্ট্রিই (old.explanation) সবসময় সবার আগে থাকবে।
-    let autoExplain = '';
-    try {
-      const fb = mc.getFeedbackForCorrectAnswers();
-      if (fb) autoExplain = String(fb.getText() || '').trim();
-    } catch(x) {}
-    if (!autoExplain) {
+      let autoCorrect = '';
       try {
-        autoExplain = String(item.getHelpText() || '').trim();
-      } catch(x) {}
-    }
+        const idx = choiceObjs.findIndex(c => c.isCorrectAnswer());
+        if (idx !== -1) autoCorrect = LETTERS[idx] || '';
+      } catch (x) {}
 
-    const finalCorrect = old.correct || autoCorrect || '';
-    const finalExplain = old.explanation || autoExplain || '';
-    if (!old.correct && autoCorrect) autoCorrectCount++;
-    if (!old.explanation && autoExplain) autoExplainCount++;
+      let autoExplain = '';
+      try {
+        const fb = mc.getFeedbackForCorrectAnswers();
+        if (fb) autoExplain = String(fb.getText() || '').trim();
+      } catch (x) {}
+      if (!autoExplain) {
+        try { autoExplain = String(item.getHelpText() || '').trim(); } catch (x) {}
+      }
 
-    return [i + 1, qText, choices[0], choices[1], choices[2], choices[3],
-            finalCorrect, finalExplain];
+      const finalCorrect = old.correct || autoCorrect || '';
+      const finalExplain = old.explanation || autoExplain || '';
+      if (!old.correct && autoCorrect) autoCorrectCount++;
+      if (!old.explanation && autoExplain) autoExplainCount++;
+
+      // Q.No "Section.প্রশ্ন" ফরম্যাটে টেক্সট হিসেবে বানানো হচ্ছে (নিচে
+      // setNumberFormat('@') দিয়ে কলামটা Plain text করে রাখা হয়েছে,
+      // নয়তো Google Sheets এটাকে সংখ্যা ভেবে "2.100"-কে "2.1" বানিয়ে
+      // দশমিকের পরের শূন্য কেটে ফেলত)।
+      return [`${sectionNum}.${i + 1}`, qText, choices[0], choices[1], choices[2], choices[3],
+              finalCorrect, finalExplain, formId, sectionNum, examTitle];
+    });
+
+    const totalRows = 1 + dataRows.length;
+    sheet.insertRowsBefore(insertAt, totalRows);
+
+    const dividerRow = insertAt;
+    sheet.getRange(dividerRow, 1, 1, 8).merge()
+      .setValue(`📘 Section ${sectionNum}: ${examTitle}`)
+      .setBackground('#1d4ed8').setFontColor('white').setFontWeight('bold')
+      .setFontSize(12).setHorizontalAlignment('center');
+    sheet.getRange(dividerRow, 9, 1, 3).setValues([[formId, sectionNum, examTitle]]);
+
+    // FIX: Q.No কলাম (A) Plain-text ফরম্যাট করে রাখা হচ্ছে — setValues()-এর
+    // ঠিক আগে, যাতে "2.100"-এর মতো টেক্সট Sheets নিজে থেকে সংখ্যা ভেবে
+    // "2.1"-এ রূপান্তর (দশমিকের শূন্য বাদ) না করে দেয়।
+    sheet.getRange(dividerRow + 1, 1, dataRows.length, 1).setNumberFormat('@');
+    sheet.getRange(dividerRow + 1, 1, dataRows.length, 11).setValues(dataRows);
+
+    const rule = SpreadsheetApp.newDataValidation().requireValueInList(['A', 'B', 'C', 'D'], true).build();
+    sheet.getRange(dividerRow + 1, 7, dataRows.length, 1).setDataValidation(rule);
+    sheet.getRange(dividerRow + 1, 1, dataRows.length, 8).setWrap(true).setVerticalAlignment('top');
+
+    let note = '';
+    if (autoCorrectCount > 0 || autoExplainCount > 0) note = ` (অটো-ফিল: উত্তর ${autoCorrectCount}, ব্যাখ্যা ${autoExplainCount})`;
+    else if (!isQuiz) note = ' (অটো-ফিল হয়নি — হাতে Correct Answer/Explanation ভরো)';
+    results.push(`✅ ${examTitle} — ${dataRows.length}টা প্রশ্ন ${existing ? 'আপডেট হয়েছে' : 'যোগ হয়েছে (Section ' + sectionNum + ')'}${note}`);
   });
-  sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
 
-  const rule = SpreadsheetApp.newDataValidation().requireValueInList(['A', 'B', 'C', 'D'], true).build();
-  sheet.getRange(2, 7, rows.length, 1).setDataValidation(rule);
-
-  sheet.setColumnWidth(1, 50);
-  sheet.setColumnWidth(2, 320);
-  for (let c = 3; c <= 6; c++) sheet.setColumnWidth(c, 150);
-  sheet.setColumnWidth(7, 100);
-  sheet.setColumnWidth(8, 320);
-  sheet.setFrozenRows(1);
-  sheet.getRange(2, 1, rows.length, headers.length).setWrap(true).setVerticalAlignment('top');
-
-  let autoNote;
-  if (autoCorrectCount > 0 || autoExplainCount > 0) {
-    autoNote = `\n\nঅটো-ফিল হয়েছে: সঠিক উত্তর ${autoCorrectCount}টা, ব্যাখ্যা ${autoExplainCount}টা। বাকিগুলো (আর দরকার হলে অটো-ফিল হওয়াগুলোও) হাতে ঠিক করে নিতে পারো।\n\nটিপস: ব্যাখ্যা গ্যারান্টিভাবে অটো-আসার সবচেয়ে সহজ উপায় — Quiz মোড লাগবে না — প্রতিটা প্রশ্নের নিচে ফর্মেই "⋮ (তিন ডট) > Add description" দিয়ে ব্যাখ্যাটা লিখে রাখা। পরেরবার Fetch করলে সেটাই Explanation কলামে চলে আসবে।`;
-  } else if (!isQuiz) {
-    autoNote = `\n\nℹ️ কোনো প্রশ্নেই সঠিক উত্তর/ব্যাখ্যা অটো-ফিল হয়নি। গ্যারান্টিভাবে ব্যাখ্যা আনার সবচেয়ে সহজ উপায় (Quiz মোড লাগে না) — ফর্মে প্রতিটা প্রশ্নের নিচে "⋮ (তিন ডট) > Add description" দিয়ে ব্যাখ্যাটা লিখে রাখো, পরের বার Fetch করলে এটা Explanation কলামে অটো-আসবে। এছাড়া চাইলে ফর্মে Settings > Quizzes থেকে "Make this a quiz" চালু করে প্রতিটা প্রশ্নে সঠিক উত্তর ও "Add answer feedback" ব্যবহার করেও একই কাজ হয়। আপাতত নিচের কলামগুলো হাতে পূরণ করো।`;
-  } else {
-    autoNote = `\n\nℹ️ ফর্মটা Quiz মোড হলেও কোনো প্রশ্নে সঠিক উত্তর/ফিডব্যাক সেট পাওয়া যায়নি — নিচের কলামগুলো হাতে পূরণ করো।`;
-  }
-  ui.alert(`✅ ${rows.length}টা প্রশ্ন আনা হয়েছে "${AK_SHEET_NAME}" শীটে।${autoNote}\n\nএখন প্রতিটা সারিতে "Correct Answer" (A/B/C/D) আর দরকার হলে "Explanation" পূরণ করো, তারপর মেনু থেকে PDF দেখো/ডাউনলোড করো।`);
+  return results.join('\n') + '\n\nএখন "Answer Setup" শীটে গিয়ে যেখানে দরকার Correct Answer/Explanation ঠিক করো, তারপর মেনু থেকে PDF দেখো/ডাউনলোড করো।';
 }
 
 function setAnswerKeySettings() {
@@ -1946,8 +2058,8 @@ function setAnswerKeySettings() {
 
   const curTitle = props.getProperty('akExamTitle') || '';
   const r1 = ui.prompt(
-    'Answer Key — পরীক্ষার নাম',
-    `বর্তমান: ${curTitle || '(সেট করা নেই)'}\nনতুন নাম দাও (ফাঁকা রাখলে আগেরটাই থাকবে):`,
+    'Answer Key — পরীক্ষার নাম (ম্যানুয়াল ওভাররাইড)',
+    `"ফর্ম থেকে প্রশ্ন আনুন" চালালে এই নামটা ফর্মের নিজের টাইটেল দিয়ে অটো বসে/আপডেট হয়ে যায় — এটা শুধু চাইলে সাময়িকভাবে অন্য নাম দিতে চাইলে ব্যবহার করো।\n\nবর্তমান: ${curTitle || '(সেট করা নেই)'}\nনতুন নাম দাও (ফাঁকা রাখলে আগেরটাই থাকবে):`,
     ui.ButtonSet.OK_CANCEL
   );
   if (r1.getSelectedButton() !== ui.Button.OK) return;
@@ -1958,26 +2070,61 @@ function setAnswerKeySettings() {
   // হয়েছে — Answer Key সবসময় "⚙️ Full System Setup"-এ সেভ করা
   // posMark/negMark থেকেই নেবে, যাতে প্রতিটা পরীক্ষায় সঠিক, আপ-টু-ডেট
   // মার্কিং স্কিম দেখায়। মার্ক বদলাতে হলে মূল Setup Wizard থেকেই বদলাও।
-  ui.alert('✅ সেভ হয়েছে! (পজিটিভ/নেগেটিভ মার্ক এখন থেকে সবসময় "Full System Setup"-এর মানই ব্যবহার করবে।)');
+  ui.alert('✅ সেভ হয়েছে! (পরের বার এই ফর্ম থেকে "ফর্ম থেকে প্রশ্ন আনুন" চালালে ফর্মের টাইটেলই আবার বসে যাবে — এই নামটা স্থায়ী নয়।)');
 }
 
-/** "Answer Setup" শীট পড়ে structured array রিটার্ন করে */
+/** "Answer Setup" শীট পড়ে Section-ভিত্তিক (প্রতিটা আলাদা ফর্ম/পরীক্ষার
+ *  নিজের গ্রুপ) স্ট্রাকচার্ড ডেটা রিটার্ন করে — { sections: [...] }।
+ *  পুরনো (মাল্টি-ফর্ম সাপোর্টের আগের) সিঙ্গেল-Section শীটেও কাজ করে —
+ *  Section/ExamTitle কলাম ফাঁকা থাকলে সবকিছু একটাই ধরে নিয়ে (Section ১,
+ *  পুরনো akExamTitle প্রপার্টি থেকে নাম) গ্রুপ করে দেয়।
+ *
+ *  FIX: প্রতিটা প্রশ্নের q.qno এখানে সবসময় রানটাইমে "Section.পজিশন" থেকে
+ *  নতুন করে বানানো হয় (শীটে সেভ থাকা কাঁচা মান কখনোই সরাসরি ব্যবহার হয়
+ *  না) — কারণ Google Sheets মাঝে মাঝে "2.100"-এর মতো টেক্সটকে সংখ্যা
+ *  ভেবে "2.1" বানিয়ে দশমিকের পরের শূন্য কেটে ফেলে; পজিশন থেকে বানালে এই
+ *  বাগ আর প্রভাব ফেলতে পারে না, আর পুরনো (প্রিফিক্স-বিহীন, প্লেইন
+ *  "1,2,3...") প্রথম Sectionও এখন বাকিগুলোর মতো "1.1, 1.2..." ফরম্যাটে
+ *  ধারাবাহিকভাবে দেখাবে। */
 function getAnswerData() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(AK_SHEET_NAME);
-  if (!sheet) return [];
+  if (!sheet) return { sections: [] };
   const last = sheet.getLastRow();
-  if (last < 2) return [];
+  if (last < 2) return { sections: [] };
   const letterToIndex = { A: 0, B: 1, C: 2, D: 3 };
-  return sheet.getRange(2, 1, last - 1, 8).getValues()
-    .filter(r => String(r[1]).trim() !== '')
-    .map(r => ({
+  const rows = sheet.getRange(2, 1, last - 1, 11).getValues()
+    .filter(r => String(r[1]).trim() !== ''); // ডিভাইডার রো বাদ (Question ফাঁকা)
+
+  const fallbackTitle = PropertiesService.getScriptProperties().getProperty('akExamTitle') || 'পরীক্ষা';
+  const bySection = {};
+  const order = [];
+  rows.forEach(r => {
+    const sectionNum = r[9] || 1;
+    const examTitle  = String(r[10] || '').trim() || fallbackTitle;
+    if (!bySection[sectionNum]) {
+      bySection[sectionNum] = { sectionNum: sectionNum, examTitle: examTitle, formId: String(r[8] || ''), questions: [] };
+      order.push(sectionNum);
+    }
+    bySection[sectionNum].questions.push({
       qno: r[0],
       question: String(r[1]).trim(),
       options: [r[2], r[3], r[4], r[5]].map(o => String(o || '').trim()),
       correctIndex: letterToIndex[String(r[6]).trim().toUpperCase()] !== undefined
         ? letterToIndex[String(r[6]).trim().toUpperCase()] : -1,
       explanation: String(r[7] || '').trim()
-    }));
+    });
+  });
+
+  order.sort((a, b) => Number(a) - Number(b));
+  const sections = order.map(n => bySection[n]);
+
+  // FIX: qno সবসময় পজিশন থেকে পুনর্গঠন — শীটের কাঁচা মান (Sheets-এর
+  // auto-number রূপান্তরে ভাঙতে পারে) কখনোই সরাসরি দেখানো হয় না।
+  sections.forEach(sec => {
+    sec.questions.forEach((q, i) => { q.qno = `${sec.sectionNum}.${i + 1}`; });
+  });
+
+  return { sections: sections };
 }
 
 /**
@@ -1995,15 +2142,40 @@ function getAnswerData() {
  */
 function autoGenerateAnswerKeyRow() {
   const ui = SpreadsheetApp.getUi();
-  const data = getAnswerData();
-  if (data.length === 0) {
+  const bank = getAnswerData();
+  if (bank.sections.length === 0) {
     ui.alert('⚠️ কোনো প্রশ্ন পাওয়া যায়নি — আগে "ফর্ম থেকে প্রশ্ন আনুন" চালাও এবং প্রতিটা প্রশ্নের সঠিক উত্তর ঠিক করো।');
     return;
   }
+
+  // একাধিক ফর্মের প্রশ্ন ব্যাংক জমা থাকতে পারে, কিন্তু মূল রেসপন্স শীট
+  // সবসময় একটাই নির্দিষ্ট পরীক্ষার — তাই একাধিক Section থাকলে কোনটার জন্য
+  // Answer Key Row বসাতে হবে জিজ্ঞেস করা হয়; একটাই থাকলে (সবচেয়ে সাধারণ
+  // ক্ষেত্র) সরাসরি সেটাই ব্যবহার হয়, কিছু জিজ্ঞেস করা লাগে না।
+  let section;
+  if (bank.sections.length === 1) {
+    section = bank.sections[0];
+  } else {
+    const list = bank.sections.map((s, i) => `${i + 1}. ${s.examTitle} (${s.questions.length}টা প্রশ্ন)`).join('\n');
+    const r = ui.prompt(
+      'কোন পরীক্ষার জন্য Answer Key Row বসাবে?',
+      list + '\n\nউপরের লিস্ট থেকে নম্বর (১, ২, ...) লিখে দাও:',
+      ui.ButtonSet.OK_CANCEL
+    );
+    if (r.getSelectedButton() !== ui.Button.OK) return;
+    const idx = parseInt(r.getResponseText().trim(), 10) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= bank.sections.length) {
+      ui.alert('⚠️ ভুল নম্বর।');
+      return;
+    }
+    section = bank.sections[idx];
+  }
+  const data = section.questions;
+
   const missing = data.filter(q => q.correctIndex === -1);
   if (missing.length > 0) {
     const qnos = missing.map(q => q.qno).slice(0, 15).join(', ') + (missing.length > 15 ? '...' : '');
-    ui.alert(`⚠️ ${missing.length}টা প্রশ্নে এখনো সঠিক উত্তর সেট করা নেই (Q.No: ${qnos}) — "Answer Setup" শীটে গিয়ে সব প্রশ্নে সঠিক উত্তর ঠিক করে আবার চেষ্টা করো।`);
+    ui.alert(`⚠️ "${section.examTitle}"-এর ${missing.length}টা প্রশ্নে এখনো সঠিক উত্তর সেট করা নেই (Q.No: ${qnos}) — "Answer Setup" শীটে গিয়ে সব প্রশ্নে সঠিক উত্তর ঠিক করে আবার চেষ্টা করো।`);
     return;
   }
 
@@ -2049,14 +2221,13 @@ function autoGenerateAnswerKeyRow() {
     if (nCol === -1 && /নাম|name|student/i.test(head)) nCol = j;
     if (wCol === -1 && /whatsapp|phone|মোবাইল|contact/i.test(head)) wCol = j;
   });
-  const akExamTitle = PropertiesService.getScriptProperties().getProperty('akExamTitle') || 'Answer Key';
-  if (nCol !== -1) newRow[nCol] = akExamTitle;
+  if (nCol !== -1) newRow[nCol] = section.examTitle;
   if (wCol !== -1) newRow[wCol] = '0000000000';
 
   const insertRowNum = rawData.length + 1; // একদম শেষ রো
   sourceSheet.getRange(insertRowNum, 1, 1, lastCol).setValues([newRow]);
 
-  let msg = `✅ ${matched}টা প্রশ্নের সঠিক উত্তর বসানো হয়েছে সোর্স শীটের ${insertRowNum} নম্বর রো-তে।`;
+  let msg = `✅ "${section.examTitle}"-এর ${matched}টা প্রশ্নের সঠিক উত্তর বসানো হয়েছে সোর্স শীটের ${insertRowNum} নম্বর রো-তে।`;
   if (unmatched.length > 0) {
     const qnos = unmatched.slice(0, 15).join(', ') + (unmatched.length > 15 ? '...' : '');
     msg += `\n\n⚠️ ${unmatched.length}টা প্রশ্নের কলাম মেলেনি (Q.No: ${qnos}) — সম্ভবত প্রশ্নের টেক্সট আর রেসপন্স শীটের কলাম হেডার হুবহু মিলছে না (দুটো ভিন্ন ফর্ম থেকে হলে এমন হতে পারে); ওই ঘরগুলো ফাঁকা রাখা হয়েছে, ম্যানুয়ালি ঠিক করে নাও।`;
@@ -2107,17 +2278,6 @@ function _akLogoDataUri(url) {
 }
 
 /**
- * "Answer Setup"-এর ডেটা দিয়ে DreamRise লোগো/কালার স্কিমে একটা
- * প্রিন্ট-রেডি HTML পেজ বানিয়ে Dialog-এ দেখায় — ঠিক showStatisticsDialog()-এর
- * মতোই (কমপ্যাক্ট topbar-এ লোগো + টাইটেল, নিচে ব্র্যান্ড-ব্লু অ্যাকসেন্ট
- * বর্ডার, window.print() দিয়ে PDF ডাউনলোড)। হেডারটা
- * display:table-header-group ট্রিক দিয়ে প্রিন্ট/PDF-এর প্রতিটা পেজেই
- * রিপিট হয়, আর কার্ডগুলো কমপ্যাক্ট রাখা হয়েছে যাতে পেজের নিচে বেশি ফাঁকা
- * জায়গা না থাকে। CSS ক্লাস দিয়ে হাইলাইট করা হয় বলে সঠিক উত্তর সবসময়
- * নির্ভরযোগ্যভাবে সবুজ হাইলাইট হয়, আর কোনো Google Doc/Drive ফাইলও তৈরি
- * হয় না।
- */
-/**
  * Answer Key-এর মার্ক আলাদাভাবে সেট করার (akPosMark/akNegMark) সুবিধাটা
  * বাদ দেওয়া হয়েছে — এটাই বাগের আসল কারণ ছিল: একবার আলাদা করে সেট করলে
  * সেই মান স্ক্রিপ্ট প্রপার্টিতে চিরস্থায়ীভাবে রয়ে যেত এবং পরবর্তী প্রতিটা
@@ -2132,10 +2292,23 @@ function _akSetupMark(key, defaultVal) {
   return (v !== null && v !== '' && !isNaN(parseFloat(v))) ? parseFloat(v) : defaultVal;
 }
 
+/**
+ * "Answer Setup"-এর সব Sectionের (একাধিক ফর্ম/পরীক্ষা হতে পারে) প্রশ্ন
+ * একসাথে একটাই "বই" আকারে (continuous page numbering, প্রতিটা Section
+ * নতুন পেজ থেকে শুরু) HTML Dialog-এ দেখায়। একটাই Section থাকলে আগের
+ * মতোই একক-পরীক্ষার লে-আউট দেখায়; একাধিক থাকলে প্রতিটা Sectionের আগে
+ * একটা "Section ডিভাইডার" কার্ড বসে (নিজের পরীক্ষার নাম + প্রশ্ন সংখ্যা
+ * সহ), যেটা সবসময় নতুন পেজ থেকে শুরু হতে বাধ্য করা হয়।
+ *
+ * FIX: getAnswerData() এখন { sections: [...] } রিটার্ন করে (আগে যা
+ * সরাসরি অ্যারে ছিল) — তাই এই ফাংশনটাও সেই অনুযায়ী আপডেট করা হয়েছে
+ * (আগে data.filter/.map সরাসরি অবজেক্টের উপর কল হচ্ছিল বলেই
+ * "data.filter is not a function" এররটা আসছিল)।
+ */
 function showAnswerKeyPdfDialog() {
   const ui = SpreadsheetApp.getUi();
-  const data = getAnswerData();
-  if (data.length === 0) {
+  const bank = getAnswerData();
+  if (!bank.sections || bank.sections.length === 0) {
     ui.alert('⚠️ কোনো প্রশ্ন পাওয়া যায়নি — আগে "ফর্ম থেকে প্রশ্ন আনুন" চালাও, তারপর প্রতিটা প্রশ্নের সঠিক উত্তর নির্বাচন করো।');
     return;
   }
@@ -2145,21 +2318,36 @@ function showAnswerKeyPdfDialog() {
   // রয়ে যাওয়া স্টেল ভ্যালু ভবিষ্যতেও বিভ্রান্তি না ছড়ায়
   props.deleteProperty('akPosMark');
   props.deleteProperty('akNegMark');
-  const examTitle  = props.getProperty('akExamTitle') || 'পরীক্ষা';
   const posMark    = _akSetupMark('posMark', 1);
   const negMark    = _akSetupMark('negMark', 0);
   const labels     = ['ক', 'খ', 'গ', 'ঘ'];
-  const noneCorrect = data.filter(q => q.correctIndex === -1).length;
-  const withExplain = data.filter(q => q.explanation).length;
   const logoSrc    = _akLogoDataUri(DR_LOGO_LIGHT_URL);
+
+  const sections     = bank.sections;
+  const isBook       = sections.length > 1;
+  const allQuestions = sections.reduce((acc, s) => acc.concat(s.questions), []);
+  const totalQ       = allQuestions.length;
+  const noneCorrect  = allQuestions.filter(q => q.correctIndex === -1).length;
+  const withExplain  = allQuestions.filter(q => q.explanation).length;
+
+  // একটাই Section থাকলে সেই Sectionের নিজের পরীক্ষার নামই বইয়ের টাইটেল;
+  // একাধিক থাকলে একটা কম্বাইন্ড টাইটেল দেখানো হয়, প্রতিটা Sectionের নাম
+  // তার নিজের ডিভাইডার কার্ডেই দেখা যাবে।
+  const examTitle = isBook
+    ? (props.getProperty('akExamTitle') || 'উত্তরমালা সংকলন')
+    : (sections[0].examTitle || props.getProperty('akExamTitle') || 'পরীক্ষা');
+  // একটাও প্রশ্নে ব্যাখ্যা না থাকলে টাইটেল থেকে "ও ব্যাখ্যা" শব্দটা বাদ
+  // দেওয়া হয় — খামোখা "ব্যাখ্যা" শব্দ থাকলে বিভ্রান্তিকর লাগে যদি আদতে
+  // কোনো ব্যাখ্যাই না থাকে
+  const titleSuffix = withExplain > 0 ? 'সঠিক উত্তর ও ব্যাখ্যা' : 'সঠিক উত্তর';
 
   const infoLine = [
     `সঠিক উত্তর: +${posMark}`,
     negMark > 0 ? `ভুল উত্তর: −${negMark}` : 'নেগেটিভ মার্কিং নেই',
-    `মোট প্রশ্ন: ${data.length}`
+    isBook ? `মোট পরীক্ষা: ${sections.length}  |  মোট প্রশ্ন: ${totalQ}` : `মোট প্রশ্ন: ${totalQ}`
   ].join('  |  ');
 
-  const cardsHtml = data.map(q => {
+  const cardHtmlFor = (q) => {
     const optsHtml = q.options.map((opt, i) => {
       if (!opt) return '';
       const isCorrect = i === q.correctIndex;
@@ -2174,6 +2362,16 @@ function showAnswerKeyPdfDialog() {
         <div class="opts">${optsHtml}</div>
         ${explainHtml}
       </div>`;
+  };
+
+  // মাল্টি-Section "বই": প্রতিটা Sectionের আগে একটা ডিভাইডার — সবসময় নতুন
+  // পেজ থেকে শুরু হয় (paginate()-এ .section-divider দেখলেই ফোর্স-ব্রেক)।
+  // সিঙ্গেল-এক্সাম মোডে ডিভাইডার দেখানো হয় না (আগের মতোই লে-আউট)।
+  const cardsHtml = sections.map(sec => {
+    const dividerHtml = isBook
+      ? `<div class="section-divider"> Section ${sec.sectionNum}: ${_akEscapeHtml(sec.examTitle)} — ${sec.questions.length}টা প্রশ্ন</div>`
+      : '';
+    return dividerHtml + sec.questions.map(cardHtmlFor).join('');
   }).join('');
 
   const warnHtml = noneCorrect > 0
@@ -2190,7 +2388,7 @@ function showAnswerKeyPdfDialog() {
 <style>
   @page { size:A4; margin:14mm 12mm; }
   * , body { box-sizing:border-box; margin:0; padding:0; font-family:'Anek Bangla',sans-serif; }
-  html, body{ background:#eef2f7; color:#0f172a; font-size:14px; }
+  html, body{ background:#eef2f7; color:#0f172a; font-size:15px; }
 
   .actions{
     display:flex; justify-content:flex-end; gap:8px; padding:12px 16px 0; background:#eef2f7;
@@ -2220,8 +2418,11 @@ function showAnswerKeyPdfDialog() {
      সরাসরি <table><thead> — যা <thead>-এর ডিফল্ট আচরণেই প্রতিটা প্রিন্ট
      পেজে নির্ভরযোগ্যভাবে রিপিট হয় — আর হেডারের ভেতরের লে-আউটও flex বাদ
      দিয়ে সাব-টেবিল দিয়ে করা হয়েছে, যাতে থিড-এর ভেতরের কনটেন্ট রিপিট সব
-     ব্রাউজারে/PDF এক্সপোর্টে সমানভাবে কাজ করে। ── */
-  table.sheet{ width:100%; border-collapse:collapse; }
+     ব্রাউজারে/PDF এক্সপোর্টে সমানভাবে কাজ করে।
+     max-width A4-এর প্রিন্টেবল প্রস্থের (210mm − 12mm×2 মার্জিন ≈ 703px)
+     সমান রাখা হয়েছে, যাতে স্ক্রিনে দেখতে পাওয়া লে-আউটই হুবহু প্রিন্ট/PDF-এ
+     যায় — এটাই নিচের পেজ-নম্বর হিসাবের ভিত্তি। ── */
+  table.sheet{ width:100%; max-width:703px; margin:0 auto; border-collapse:collapse; }
   table.sheet > thead > tr > th{ padding:0; text-align:left; font-weight:normal; }
   table.sheet > tbody > tr > td{ padding:0; vertical-align:top; }
 
@@ -2231,23 +2432,35 @@ function showAnswerKeyPdfDialog() {
   table.topbar img.logo{ height:48px; width:auto; display:block; }
   table.topbar .dividercell{ width:1px; background:#e2e8f0; padding:0; }
   table.topbar .infocell{ text-align:left; padding-left:16px; }
-  .ttitle{ color:#0f1f3d; font-weight:800; font-size:17px; line-height:1.4; letter-spacing:.2px; }
-  .tsub{ color:#2563eb; font-size:13px; margin-top:6px; font-weight:700; line-height:1.5; }
+  .ttitle{ color:#0f1f3d; font-weight:800; font-size:18px; line-height:1.4; letter-spacing:.2px; }
+  .tsub{ color:#2563eb; font-size:14px; margin-top:6px; font-weight:700; line-height:1.5; }
 
   .body{ padding:16px 16px 24px; }
   .card{
     background:#fff; border:1px solid #e2e8f0; border-left:4px solid #2563eb; border-radius:8px;
     padding:12px 14px; margin-bottom:10px;
   }
-  .qhead{ display:flex; align-items:flex-start; gap:8px; font-weight:700; margin-bottom:9px; font-size:15px; line-height:1.5; }
+  /* মাল্টি-ফর্ম "বই"-এর প্রতিটা Sectionের শুরুতে বসে — নিজের পরীক্ষার নাম
+     আর প্রশ্ন সংখ্যা দেখায়, আর সবসময় নতুন পেজ থেকে শুরু হতে বাধ্য করা হয়
+     (paginate() জাভাস্ক্রিপ্টে .force-break যোগ হয়)। */
+  .section-divider{
+    background:#1d4ed8; color:#fff; font-weight:800; font-size:15px;
+    border-radius:8px; padding:11px 16px; margin-bottom:12px; text-align:center;
+  }
+  /* JS পেজিনেশন যেখানে হিসাব করে একটা নতুন পেজ শুরু হওয়া উচিত (বা যেটা
+     সবসময় নতুন পেজ থেকে শুরু হওয়া দরকার, যেমন Section ডিভাইডার), সেই
+     ব্লকে এই ক্লাস বসিয়ে দেয় — প্রিন্ট/PDF-এ জোর করে নতুন পেজ থেকে
+     শুরু করায়। */
+  .force-break{ break-before:page; page-break-before:always; }
+  .qhead{ display:flex; align-items:flex-start; gap:8px; font-weight:700; margin-bottom:9px; font-size:16px; line-height:1.5; }
   .qhead .qno{
-    flex-shrink:0; background:#eff6ff; color:#1d4ed8; font-weight:800; font-size:12.5px;
+    flex-shrink:0; background:#eff6ff; color:#1d4ed8; font-weight:800; font-size:14px;
     border-radius:6px; padding:3px 9px; white-space:nowrap;
   }
   .qhead .qtext{ padding-top:2px; }
   .opts{ display:grid; grid-template-columns:1fr 1fr; gap:7px; }
   .opt{
-    padding:8px 10px; border-radius:6px; font-size:14px; line-height:1.4;
+    padding:8px 10px; border-radius:6px; font-size:15px; line-height:1.4;
     border:1px solid transparent; background:#f8fafc; color:#1e293b;
   }
   .opt.correct{
@@ -2255,34 +2468,53 @@ function showAnswerKeyPdfDialog() {
   }
   .explain{
     margin-top:9px; padding:8px 11px; border-radius:6px;
-    background:#f1f5f9; font-size:13px; line-height:1.55; color:#475569;
+    background:#f1f5f9; font-size:14px; line-height:1.55; color:#475569;
   }
   .explain b{ color:#0f172a; }
   .footer{
     text-align:center; color:#94a3b8; font-size:12px; padding:14px;
   }
+  .footer a{ color:#64748b; font-weight:700; text-decoration:underline; }
+
+  /* ── JS পেজিনেশন প্রতিটা পেজের শেষে এই ফুটার বসিয়ে দেয় ("পৃষ্ঠা ২ / ৫"
+     স্টাইলে) — .brk ক্লাসসহ ফুটারের পরেই পরবর্তী পেজ শুরু হয় (শেষ পেজের
+     ফুটারে .brk থাকে না, তাই এর পর আর নতুন খালি পেজ তৈরি হয় না)। এটা
+     ব্রাউজারের real page-counter না — Chrome print engine CSS দিয়ে আসল
+     পেজ-নম্বর দেওয়ার সুবিধা দেয় না, তাই কন্টেন্টের উচ্চতা মেপে জাভাস্ক্রিপ্ট
+     নিজে হিসাব করে বসায়; প্রায় সব ক্ষেত্রেই নির্ভুল হবে, তবে সীমার একদম
+     কাছাকাছি কোনো লাইনে ১ পেজ এদিক-ওদিক হতে পারে। বইয়ের ক্ষেত্রে (একাধিক
+     Section) নাম্বারিং পুরো বই জুড়ে ধারাবাহিক থাকে, প্রতিটা Sectionে রিসেট
+     হয় না। ── */
+  .page-footer{
+    text-align:center; color:#64748b; font-size:11.5px; font-weight:700;
+    padding:8px 0 2px;
+  }
+  .page-footer.brk{ break-after:page; page-break-after:always; }
+
+  /* ── পুরো পেজ জুড়ে নীল বর্ডার — position:fixed এলিমেন্ট Chrome-এর প্রিন্ট
+     ইঞ্জিনে প্রতিটা পেজেই স্বয়ংক্রিয়ভাবে রিপিট হয় (কোনো JS ছাড়াই), তাই এই
+     একই বর্ডার প্রতিটা প্রিন্ট/PDF পেজের চারদিকেই বসবে — পরে সবগুলো PDF
+     একত্রিত করে একটা "বই" বানালে প্রতিটা পেজ একই রকম দেখাবে। ── */
+  .page-frame{ display:none; }
   @media print{
     html, body{ background:#fff; }
     .actions{ display:none; }
-    .card{ break-inside:avoid; border:1px solid #e2e8f0 !important; }
+    .card, .section-divider{ break-inside:avoid; }
+    .card{ border:1px solid #e2e8f0 !important; }
     thead{ display:table-header-group; }
     tbody tr{ break-inside:avoid; }
     *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-
-    /* ── প্রিন্ট/PDF-এ pt এককে নির্দিষ্ট ভৌত সাইজ — আগে স্ক্রিনের ছোট px
-       ভ্যালুই প্রিন্টে ব্যবহার হতো, তাই আউটপুটে লেখা ছোট আসতো ── */
-    body{ font-size:11.5pt; }
-    .ttitle{ font-size:14pt; }
-    .tsub{ font-size:10.5pt; }
-    .qhead{ font-size:12pt; }
-    .qhead .qno{ font-size:10.5pt; }
-    .opt{ font-size:11.5pt; }
-    .explain{ font-size:10.5pt; }
-    .footer{ font-size:9.5pt; }
+    .page-frame{
+      display:block; position:fixed; top:0; left:0; right:0; bottom:0;
+      border:2px solid #93c5fd; border-radius:16px; pointer-events:none;
+    }
   }
 </style>
+
 </head>
 <body>
+
+  <div class="page-frame"></div>
 
   <div class="actions">
     <button class="pdf-btn secondary" id="qnoToggleBtn" onclick="toggleQno()">🔢 নম্বর লুকাও</button>
@@ -2301,7 +2533,7 @@ function showAnswerKeyPdfDialog() {
           <td class="logocell"><img class="logo" src="${logoSrc}" alt="DreamRise"></td>
           <td class="dividercell"></td>
           <td class="infocell">
-            <div class="ttitle">${_akEscapeHtml(examTitle.toUpperCase())} — সঠিক উত্তর ও ব্যাখ্যা</div>
+            <div class="ttitle">${_akEscapeHtml(examTitle.toUpperCase())} — ${titleSuffix}</div>
             <div class="tsub">${infoLine}</div>
           </td>
         </tr></table>
@@ -2311,7 +2543,7 @@ function showAnswerKeyPdfDialog() {
       <tr><td>
         <div class="body">
           ${cardsHtml}
-          <div class="footer">Developed by DreamRise &amp; Muhammad Ibrahim — ব্যাখ্যা আছে ${withExplain}/${data.length} প্রশ্নে</div>
+          <div class="footer">Developed by <a href="https://www.facebook.com/dreamriseadmission" target="_blank" rel="noopener">DreamRise</a> &amp; <a href="https://www.facebook.com/muhammadibrahimsiddiknasib" target="_blank" rel="noopener">Muhammad Ibrahim</a> — ব্যাখ্যা আছে ${withExplain}/${totalQ} প্রশ্নে</div>
         </div>
       </td></tr>
     </tbody>
@@ -2322,7 +2554,73 @@ function showAnswerKeyPdfDialog() {
       document.body.classList.toggle('hide-qno');
       var hidden = document.body.classList.contains('hide-qno');
       document.getElementById('qnoToggleBtn').textContent = hidden ? '🔢 নম্বর দেখাও' : '🔢 নম্বর লুকাও';
+      paginate();
     }
+
+    /* ── প্রতিটা পেজের নিচে "পৃষ্ঠা N / মোট" বসানোর জন্য ব্লকগুলোর
+       (কার্ড + Section-ডিভাইডার) উচ্চতা মেপে হিসাব করা হয় — Chrome-এর
+       প্রিন্ট ইঞ্জিন CSS দিয়ে আসল পেজ-কাউন্টার সাপোর্ট করে না, তাই এভাবে
+       JS দিয়ে অনুমান করে বসাতে হয়েছে। table.sheet-এর max-width A4-এর
+       প্রিন্টেবল প্রস্থের সমান রাখা হয়েছে বলে স্ক্রিনে যেভাবে লাইন-র‍্যাপ
+       হয়, প্রিন্টেও সেভাবেই হবে — তাই হিসাবটা বেশিরভাগ ক্ষেত্রেই নির্ভুল
+       হওয়া উচিত। মাল্টি-Section বইয়ে প্রতিটা .section-divider সবসময় নতুন
+       পেজ থেকে শুরু হয় (ঐচ্ছিক height-based break ছাড়াই), কিন্তু পেজ
+       নাম্বারিং পুরো বই জুড়ে ধারাবাহিক থাকে। ── */
+    function paginate(){
+      document.querySelectorAll('.page-footer').forEach(function(el){ el.remove(); });
+      document.querySelectorAll('.force-break').forEach(function(el){ el.classList.remove('force-break'); });
+
+      var blocks = Array.prototype.slice.call(document.querySelectorAll('.card, .section-divider'));
+      if (!blocks.length) return;
+
+      var MM_TO_PX = 96 / 25.4;
+      var pageH    = (297 - 14 - 14) * MM_TO_PX; // A4 উচ্চতা − @page-এর উপর/নিচ মার্জিন
+      var headerEl = document.querySelector('table.topbar');
+      var headerH  = headerEl ? headerEl.getBoundingClientRect().height : 90;
+      var usableH  = pageH - headerH - 30; // পেজ-ফুটারের জন্য একটু জায়গা রাখা
+
+      var groups  = [[]];
+      var heights = [0]; // প্রতিটা গ্রুপের জমা height — footer কে পেজের
+                          // নিচের দিকে (বর্ডারের কাছাকাছি) ঠেলে দিতে লাগবে
+      var acc = 0;
+      blocks.forEach(function(block, idx){
+        var isDivider = block.classList.contains('section-divider');
+        var h = block.getBoundingClientRect().height + 10; // + margin-bottom
+        // Section ডিভাইডার (প্রথমটা বাদে) সবসময় নতুন পেজ থেকে শুরু হয়,
+        // height যতই বাকি থাকুক না কেন — একটা নতুন পরীক্ষা মাঝপথে
+        // আগের পরীক্ষার পাতার সাথে মিশে যাওয়া ঠেকাতে।
+        var mustBreak = isDivider && idx > 0;
+        if ((mustBreak || acc + h > usableH) && groups[groups.length - 1].length > 0) {
+          groups.push([]);
+          heights.push(0);
+          acc = 0;
+        }
+        groups[groups.length - 1].push(block);
+        acc += h;
+        heights[heights.length - 1] = acc;
+      });
+
+      var total = groups.length;
+      groups.forEach(function(group, i){
+        if (i > 0) group[0].classList.add('force-break');
+        var footer = document.createElement('div');
+        footer.className = 'page-footer' + (i < total - 1 ? ' brk' : '');
+        footer.textContent = 'পৃষ্ঠা ' + (i + 1) + ' / ' + total;
+        // ঐ পেজের অবশিষ্ট (খালি) জায়গাটা margin-top হিসেবে বসিয়ে দেওয়া
+        // হচ্ছে, যাতে ফুটার মাঝপথে না থেকে পেজের নিচের বর্ডারের কাছাকাছি
+        // গিয়ে বসে — 24px রাখা হয়েছে ফুটারের নিজের উচ্চতার জন্য বাফার।
+        var leftover = Math.max(0, usableH - heights[i] - 24);
+        footer.style.marginTop = leftover + 'px';
+        group[group.length - 1].insertAdjacentElement('afterend', footer);
+      });
+    }
+
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(paginate);
+    } else {
+      window.addEventListener('load', paginate);
+    }
+    window.addEventListener('beforeprint', paginate);
   </script>
 
 </body>
