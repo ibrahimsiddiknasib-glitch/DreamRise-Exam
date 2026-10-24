@@ -15,10 +15,16 @@
     input, select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-family: 'Anek Bangla', sans-serif; font-size: 14px; }
     .sub-section { margin-top: 15px; padding: 12px; border: 1px dashed #1a7fd4; border-radius: 8px; background: #f8fafc; }
     .sub-row { display: grid; grid-template-columns: 2fr 1.5fr 1fr; gap: 8px; margin-bottom: 5px; }
+    /* subject rows: name | column range | question count | pass mark */
+    .sub-row4 { grid-template-columns: 2fr 1.6fr 0.9fr 0.9fr; }
+    /* range filled automatically from the question count */
+    .sub-row[data-mode="auto"] .s-range { background: #eff6ff; }
     .btn-save { width: 100%; background: #1a7fd4; color: white; padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: 700; margin-top: 20px; font-family: 'Anek Bangla', sans-serif; }
     .btn-save:hover { background: #1565b0; }
     small { color: #64748b; font-size: 11px; font-weight: 600; }
     .highlight-box { background: #fffbeb; border: 1px solid #fde68a; padding: 10px; border-radius: 6px; margin: 10px 0; }
+    .sum-line  { color: #0f766e; font-size: 12px; font-weight: 600; margin-top: 6px; }
+    .warn-line { color: #b91c1c; font-size: 12px; font-weight: 600; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -27,43 +33,45 @@
       <img src="https://github.com/ibrahimsiddiknasib-glitch/DreamRise/blob/main/Logo_For_Dark.png?raw=true" alt="DreamRise" onerror="this.style.display='none'">
     </div>
 
-    <!-- Exam name field -->
     <label>পরীক্ষার নাম</label>
     <input type="text" id="examName" placeholder="যেমন: BCS 46th Preliminary">
 
-    <!-- Positive and negative marks -->
+    <!-- Numeric fields are text inputs so Bengali digits can be typed; they are converted on save -->
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-      <div><label>সঠিক মার্ক (+)</label><input type="number" id="posMark" value="1" step="0.1"></div>
-      <div><label>ভুল (নেগেটিভ)</label><input type="number" id="negMark" value="0.25" step="0.01"></div>
+      <div><label>সঠিক মার্ক (+)</label><input type="text" inputmode="decimal" id="posMark" value="1"></div>
+      <div><label>ভুল (নেগেটিভ)</label><input type="text" inputmode="decimal" id="negMark" value="0.25"></div>
     </div>
 
-    <!-- Answer key row number: 1-based row index from the spreadsheet -->
+    <!-- Answer key row: 1-based row number in the sheet -->
     <div class="highlight-box">
       <label style="margin-top:0;">অ্যানসার কী রো নম্বর (Answer Key Row #)</label>
-      <input type="number" id="ansKeyRow" placeholder="উদা: 2">
+      <input type="text" inputmode="numeric" id="ansKeyRow" placeholder="উদা: 2">
       <small>শীটের কত নম্বর সারিতে সঠিক উত্তর আছে তা লিখুন।</small>
     </div>
 
-    <!-- Global pass percentage -->
     <label>সামগ্রিক পাস মার্ক (Total Pass %)</label>
-    <input type="number" id="globalPass" value="40">
+    <input type="text" inputmode="decimal" id="globalPass" value="40">
 
-    <!-- Toggle between standard range and subject-wise mode -->
     <label>সাবজেক্ট ভিত্তিক কন্ডিশন আছে?</label>
     <select id="isSub" onchange="toggleSub()">
       <option value="false">না (পুরো রেঞ্জ একসাথে)</option>
       <option value="true">হ্যাঁ (আলাদা আলাদা পাস মার্ক)</option>
     </select>
 
-    <!-- Standard (single-range) mode -->
+    <!-- Standard mode: start column + total questions fill the range, or type the range yourself -->
     <div id="normalBox" style="margin-top:10px;">
-      <label>প্রশ্নের কলাম রেঞ্জ (উদা: G:DB)</label>
-      <input type="text" id="stdRange" placeholder="G:DB">
+      <div style="display:grid; grid-template-columns: 1fr 1fr 1.6fr; gap:10px;">
+        <div><label>প্রথম কলাম</label><input type="text" id="stdStart" placeholder="G" oninput="onStdInput('start')"></div>
+        <div><label>মোট প্রশ্ন</label><input type="text" inputmode="numeric" id="stdCount" placeholder="100" oninput="onStdInput('count')"></div>
+        <div><label>কলাম রেঞ্জ (উদা: G:DB)</label><input type="text" id="stdRange" placeholder="G:DB" oninput="onStdInput('range')"></div>
+      </div>
+      <small>প্রথম কলাম আর মোট প্রশ্ন দিলে রেঞ্জ অটো বসবে; রেঞ্জ নিজে লিখলে প্রশ্ন সংখ্যা লাইভ হিসাব হবে।</small>
+      <div id="stdInfo" class="sum-line"></div>
     </div>
 
-    <!-- Subject-wise mode: dynamic subject rows -->
+    <!-- Subject-wise mode -->
     <div id="subBox" class="sub-section" style="display:none;">
-      <label>সাবজেক্ট সংখ্যা</label>
+      <label style="margin-top:0;">সাবজেক্ট সংখ্যা</label>
       <select id="subCount" onchange="renderSubRows()">
         <option value="2">২ টি</option>
         <option value="3">৩ টি</option>
@@ -75,10 +83,19 @@
         <option value="9">৯ টি</option>
         <option value="10">১০ টি</option>
       </select>
+
+      <div class="highlight-box">
+        <label style="margin-top:0;">প্রথম কলাম (অটো রেঞ্জের জন্য)</label>
+        <input type="text" id="startCol" placeholder="যেমন: F" oninput="recalcSubjects()">
+        <small>প্রতি সাবজেক্টে শুধু প্রশ্ন সংখ্যা দিন — রেঞ্জ একটার পর একটা অটো বসবে। চাইলে রেঞ্জ নিজেও লিখতে পারেন, তখন প্রশ্ন সংখ্যা লাইভ হিসাব হবে।</small>
+      </div>
+
       <div id="subContainer" style="margin-top:10px;"></div>
+      <div id="subSummary" class="sum-line"></div>
+      <div id="subWarn" class="warn-line"></div>
     </div>
 
-    <!-- ═══════════ Additional Mark (লিখিত/হোমওয়ার্ক) সেকশন ═══════════ -->
+    <!-- ═══════════ Additional Mark (written / homework) ═══════════ -->
     <div class="sub-section" style="border-color:#16a34a;">
       <label style="margin-top:0;">
         <input type="checkbox" id="hasAddl" onchange="toggleAddl()" style="width:auto; display:inline-block; vertical-align:middle; margin-right:6px;">
@@ -93,21 +110,17 @@
           <option value="subjectwise">প্রতিটা সাবজেক্টে আলাদা (Subject-wise)</option>
         </select>
 
-        <!-- Overall mode: name + max mark + pass mark
-             NEW: পাস মার্ক ফিল্ড যোগ করা হয়েছে — এখন Subject-wise মোডের
-             মতোই Overall Additional Mark-এরও নিজস্ব পাস মার্ক থাকবে।
-             এই মার্ক পাস-থ্রেশহোল্ডের নিচে থাকলে ছাত্র সার্বিকভাবে ফেইল
-             ধরা হবে, শুধু সামগ্রিক Grand Total পাস % দিয়ে বিচার করা হবে না। -->
+        <!-- Overall mode: name + max mark + pass mark -->
         <div id="addlOverallBox" style="margin-top:10px;">
           <div class="sub-row" style="grid-template-columns:2fr 1fr 1fr;">
-            <input type="text"   id="addlName" placeholder="নাম (যেমন: লিখিত)">
-            <input type="number" id="addlMax"  placeholder="সর্বোচ্চ মার্ক">
-            <input type="number" id="addlPass" placeholder="পাস মার্ক">
+            <input type="text" id="addlName" placeholder="নাম (যেমন: লিখিত)">
+            <input type="text" inputmode="decimal" id="addlMax"  placeholder="সর্বোচ্চ মার্ক">
+            <input type="text" inputmode="decimal" id="addlPass" placeholder="পাস মার্ক">
           </div>
           <small>এই বিষয়ে পাস মার্কের নিচে পেলে ছাত্র সার্বিকভাবে ফেইল করবে (খালি রাখলে পাস মার্ক ০ ধরা হবে)।</small>
         </div>
 
-        <!-- Subject-wise mode: mirrors subject names already entered above -->
+        <!-- Subject-wise mode: mirrors the subject names above -->
         <div id="addlSubBox" style="display:none; margin-top:10px;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <small>সাবজেক্ট (উপরের লিস্ট থেকে অটো)</small>
@@ -127,16 +140,120 @@
   </div>
 
   <script>
-    /* Toggle visibility between standard-range and subject-wise sections */
+    /* ───────── Helpers: digits, column letters, ranges ───────── */
+
+    // Bengali / Devanagari / Arabic-Indic digits -> 0-9
+    function toEn(str) {
+      return String(str == null ? '' : str).replace(/[০-৯०-९٠-٩۰-۹]/g, function (ch) {
+        var c = ch.charCodeAt(0);
+        if (c >= 0x09E6 && c <= 0x09EF) return String(c - 0x09E6);
+        if (c >= 0x0966 && c <= 0x096F) return String(c - 0x0966);
+        if (c >= 0x0660 && c <= 0x0669) return String(c - 0x0660);
+        if (c >= 0x06F0 && c <= 0x06F9) return String(c - 0x06F0);
+        return ch;
+      });
+    }
+    // Numeric text field -> clean English-digit string
+    function num(v) { return toEn(v).replace(/[,٫]/g, '.').trim(); }
+    // Question count text -> integer (0 if empty/invalid)
+    function parseCount(v) {
+      var d = toEn(v).replace(/[^0-9]/g, '');
+      return d ? parseInt(d, 10) : 0;
+    }
+
+    // "F" -> 5, "AA" -> 26 (0-based). null if empty/invalid (max 3 letters)
+    function colToIdx(col) {
+      var s = String(col || '').toUpperCase().replace(/[^A-Z]/g, '');
+      if (!s || s.length > 3) return null;
+      var n = 0;
+      for (var i = 0; i < s.length; i++) n = n * 26 + (s.charCodeAt(i) - 64);
+      return n - 1;
+    }
+    // 5 -> "F", 26 -> "AA"
+    function idxToCol(idx) {
+      var n = idx + 1, out = '';
+      while (n > 0) { n--; out = String.fromCharCode(65 + (n % 26)) + out; n = Math.floor(n / 26); }
+      return out;
+    }
+    // "f:aj", "F-AJ", "F" -> { start, end } (0-based) or null
+    function parseRangeStr(str) {
+      var t = String(str || '').toUpperCase().replace(/\s+/g, '').replace(/[–—~\-]/g, ':');
+      var m = t.match(/^([A-Z]{1,3}):([A-Z]{1,3})$/);
+      var a, b;
+      if (m) { a = colToIdx(m[1]); b = colToIdx(m[2]); }
+      else if (/^[A-Z]{1,3}$/.test(t)) { a = b = colToIdx(t); }
+      else return null;
+      if (a == null || b == null || a > b) return null;
+      return { start: a, end: b };
+    }
+    function fmtRange(r) { return idxToCol(r.start) + ':' + idxToCol(r.end); }
+
+    // First overlapping pair of ranges [{start,end,label}], or null
+    function findOverlap(list) {
+      for (var i = 0; i < list.length; i++) {
+        for (var j = i + 1; j < list.length; j++) {
+          if (!(list[i].end < list[j].start || list[j].end < list[i].start)) return [list[i], list[j]];
+        }
+      }
+      return null;
+    }
+
+    /* Chain the subjects: rows = [{mode, range, count}] in order.
+       - manual row: range typed by the user, count is derived from it
+       - auto row:   starts right after the previous row, count given by the user
+       Returns [{range, count, start, end}] for every row. */
+    function computeChain(startIdx, rows) {
+      var next = startIdx; // null = unknown
+      return rows.map(function (r) {
+        var out = { range: r.range, count: r.count, start: null, end: null };
+        if (r.mode === 'manual') {
+          var p = parseRangeStr(r.range);
+          if (p) { out.start = p.start; out.end = p.end; out.count = p.end - p.start + 1; next = p.end + 1; }
+          else   { out.count = ''; next = null; }
+        } else {
+          var n = r.count;
+          if (n > 0 && next != null) {
+            out.start = next; out.end = next + n - 1;
+            out.range = idxToCol(out.start) + ':' + idxToCol(out.end);
+            next = out.end + 1;
+          } else {
+            out.range = '';
+            if (n > 0) next = null; // cannot place this subject, so later ones cannot be placed either
+          }
+        }
+        return out;
+      });
+    }
+
+    /* ───────── Standard (single range) mode ───────── */
+    // src: 'start' | 'count' | 'range' — the field the user just edited
+    function onStdInput(src) {
+      var sEl = document.getElementById('stdStart');
+      var cEl = document.getElementById('stdCount');
+      var rEl = document.getElementById('stdRange');
+      if (src === 'range') {
+        var p = parseRangeStr(rEl.value);
+        if (p) { cEl.value = String(p.end - p.start + 1); sEl.value = idxToCol(p.start); }
+        else   { cEl.value = ''; }
+      } else {
+        var s = colToIdx(sEl.value), n = parseCount(cEl.value);
+        if (s != null && n > 0) rEl.value = idxToCol(s) + ':' + idxToCol(s + n - 1);
+        else if (src === 'count' && n === 0) rEl.value = '';
+      }
+      var q = parseRangeStr(rEl.value);
+      document.getElementById('stdInfo').textContent =
+        q ? ('মোট প্রশ্ন: ' + (q.end - q.start + 1) + '  |  কলাম: ' + fmtRange(q)) : '';
+    }
+
+    /* ───────── Subject-wise mode ───────── */
     function toggleSub() {
-      const isSub = document.getElementById('isSub').value === 'true';
+      var isSub = document.getElementById('isSub').value === 'true';
       document.getElementById('subBox').style.display    = isSub ? 'block' : 'none';
       document.getElementById('normalBox').style.display = isSub ? 'none'  : 'block';
       if (isSub) renderSubRows();
 
-      // সাবজেক্ট-ওয়াইজ MCQ চালু না থাকলে Additional Mark-এও "Subject-wise"
-      // অপশনটা অর্থহীন (কোনো সাবজেক্ট নামই থাকবে না) — তাই disable রাখা হলো।
-      const addlSubOption = document.querySelector('#addlMode option[value="subjectwise"]');
+      // Subject-wise Additional Mark needs subject names, so disable it otherwise
+      var addlSubOption = document.querySelector('#addlMode option[value="subjectwise"]');
       addlSubOption.disabled = !isSub;
       if (!isSub && document.getElementById('addlMode').value === 'subjectwise') {
         document.getElementById('addlMode').value = 'overall';
@@ -144,24 +261,102 @@
       }
     }
 
-    /* Dynamically build subject input rows based on selected count */
-    function renderSubRows(prefillSubjects) {
-      const count     = document.getElementById('subCount').value;
-      const container = document.getElementById('subContainer');
-      container.innerHTML =
-        '<div class="sub-row"><small>নাম</small><small>রেঞ্জ</small><small>পাস নম্বর</small></div>';
-      for (let i = 0; i < count; i++) {
-        const pf = (prefillSubjects && prefillSubjects[i]) || {};
-        container.innerHTML += `
-          <div class="sub-row">
-            <input type="text"   class="s-name"  placeholder="বাংলা" value="${pf.name || ''}">
-            <input type="text"   class="s-range" placeholder="G:L"   value="${pf.range || ''}">
-            <input type="number" class="s-pass"  value="${pf.pass != null ? pf.pass : 5}">
-          </div>`;
-      }
+    // Current subject rows from the DOM (used to keep typed values when the row count changes)
+    function readSubRows() {
+      return Array.prototype.map.call(document.querySelectorAll('#subContainer .data-row'), function (row) {
+        return {
+          name:  row.querySelector('.s-name').value,
+          range: row.querySelector('.s-range').value,
+          count: row.querySelector('.s-count').value,
+          pass:  row.querySelector('.s-pass').value,
+          mode:  row.dataset.mode
+        };
+      });
     }
 
-    /* ── Additional Mark section handlers ── */
+    function makeSubRow(pf) {
+      var row = document.createElement('div');
+      row.className = 'sub-row sub-row4 data-row';
+      row.dataset.mode = pf.mode || (pf.range ? 'manual' : 'auto');
+      row.innerHTML =
+        '<input type="text" class="s-name"  placeholder="বাংলা / English">' +
+        '<input type="text" class="s-range" placeholder="G:L" oninput="onRangeInput(this)">' +
+        '<input type="text" class="s-count" inputmode="numeric" placeholder="০" oninput="onCountInput(this)">' +
+        '<input type="text" class="s-pass"  inputmode="decimal">';
+      row.querySelector('.s-name').value  = pf.name  || '';
+      row.querySelector('.s-range').value = pf.range || '';
+      row.querySelector('.s-count').value = pf.count != null ? pf.count : '';
+      row.querySelector('.s-pass').value  = pf.pass  != null && pf.pass !== '' ? pf.pass : 5;
+      return row;
+    }
+
+    // prefillSubjects: saved subjects [{name, range, pass}]; without it the current rows are kept
+    function renderSubRows(prefillSubjects) {
+      var count     = parseInt(document.getElementById('subCount').value, 10);
+      var container = document.getElementById('subContainer');
+      var current   = prefillSubjects || readSubRows();
+      container.innerHTML =
+        '<div class="sub-row sub-row4"><small>নাম</small><small>কলাম রেঞ্জ</small><small>প্রশ্ন সংখ্যা</small><small>পাস নম্বর</small></div>';
+      for (var i = 0; i < count; i++) {
+        container.appendChild(makeSubRow(current[i] || {}));
+      }
+      recalcSubjects();
+    }
+
+    // The user typed a range -> manual row (clearing it returns to auto)
+    function onRangeInput(el) {
+      var row = el.closest('.data-row');
+      row.dataset.mode = el.value.trim() ? 'manual' : 'auto';
+      recalcSubjects();
+    }
+    // The user typed a question count -> auto row
+    function onCountInput(el) {
+      el.closest('.data-row').dataset.mode = 'auto';
+      recalcSubjects();
+    }
+
+    // Recompute every row, write results back, update summary and warnings
+    function recalcSubjects() {
+      var rows = Array.prototype.slice.call(document.querySelectorAll('#subContainer .data-row'));
+      var input = rows.map(function (row) {
+        return {
+          mode:  row.dataset.mode,
+          range: row.querySelector('.s-range').value,
+          count: parseCount(row.querySelector('.s-count').value)
+        };
+      });
+      var res = computeChain(colToIdx(document.getElementById('startCol').value), input);
+
+      var placed = [], totalQ = 0, minS = null, maxE = null, needStart = false;
+      rows.forEach(function (row, i) {
+        var o = res[i];
+        if (row.dataset.mode === 'manual') {
+          row.querySelector('.s-count').value = o.count === '' ? '' : String(o.count);
+        } else {
+          row.querySelector('.s-range').value = o.range;
+          if (input[i].count > 0 && !o.range) needStart = true;
+        }
+        if (o.start != null) {
+          var nm = row.querySelector('.s-name').value.trim() || ('সাবজেক্ট ' + (i + 1));
+          placed.push({ start: o.start, end: o.end, label: nm });
+          totalQ += o.end - o.start + 1;
+          if (minS == null || o.start < minS) minS = o.start;
+          if (maxE == null || o.end > maxE)   maxE = o.end;
+        }
+      });
+
+      document.getElementById('subSummary').textContent = placed.length
+        ? ('মোট প্রশ্ন: ' + totalQ + '  |  কলাম: ' + idxToCol(minS) + ' → ' + idxToCol(maxE))
+        : '';
+
+      var warn = '';
+      var ov = findOverlap(placed);
+      if (ov) warn = '⚠️ কলাম মিলে যাচ্ছে: "' + ov[0].label + '" আর "' + ov[1].label + '"';
+      else if (needStart) warn = '⚠️ অটো রেঞ্জের জন্য আগে "প্রথম কলাম" দিন (অথবা আগের সাবজেক্টের রেঞ্জ ঠিক করুন)।';
+      document.getElementById('subWarn').textContent = warn;
+    }
+
+    /* ───────── Additional Mark section ───────── */
     function toggleAddl() {
       document.getElementById('addlModeBox').style.display =
         document.getElementById('hasAddl').checked ? 'block' : 'none';
@@ -169,94 +364,105 @@
     }
 
     function renderAddlRows(prefillAddlSubjects) {
-      const mode = document.getElementById('addlMode').value;
-      document.getElementById('addlOverallBox').style.display = mode === 'overall'      ? 'block' : 'none';
-      document.getElementById('addlSubBox').style.display     = mode === 'subjectwise'  ? 'block' : 'none';
+      var mode = document.getElementById('addlMode').value;
+      document.getElementById('addlOverallBox').style.display = mode === 'overall'     ? 'block' : 'none';
+      document.getElementById('addlSubBox').style.display     = mode === 'subjectwise' ? 'block' : 'none';
       if (mode !== 'subjectwise') return;
 
-      const names     = document.querySelectorAll('.s-name');
-      const container = document.getElementById('addlSubContainer');
+      var names     = document.querySelectorAll('.s-name');
+      var container = document.getElementById('addlSubContainer');
       container.innerHTML = '';
-      names.forEach((n, i) => {
-        if (!n.value) return;
-        const pf = (prefillAddlSubjects && prefillAddlSubjects.find(x => x.name === n.value)) || {};
-        container.innerHTML += `
-          <div class="sub-row" style="grid-template-columns:2fr 1fr 1fr;">
-            <input type="text"   value="${n.value}" disabled style="background:#f1f5f9;">
-            <input type="number" class="addl-max"  placeholder="সর্বোচ্চ" value="${pf.max != null ? pf.max : ''}">
-            <input type="number" class="addl-pass" placeholder="পাস"     value="${pf.pass != null ? pf.pass : ''}">
-          </div>`;
+      Array.prototype.forEach.call(names, function (n) {
+        if (!n.value.trim()) return;
+        var pf = (prefillAddlSubjects && prefillAddlSubjects.find(function (x) { return x.name === n.value; })) || {};
+        var row = document.createElement('div');
+        row.className = 'sub-row';
+        row.style.gridTemplateColumns = '2fr 1fr 1fr';
+        row.innerHTML =
+          '<input type="text" class="addl-name" disabled style="background:#f1f5f9;">' +
+          '<input type="text" inputmode="decimal" class="addl-max"  placeholder="সর্বোচ্চ">' +
+          '<input type="text" inputmode="decimal" class="addl-pass" placeholder="পাস">';
+        row.querySelector('.addl-name').value = n.value;
+        row.querySelector('.addl-max').value  = pf.max  != null ? pf.max  : '';
+        row.querySelector('.addl-pass').value = pf.pass != null ? pf.pass : '';
+        container.appendChild(row);
       });
     }
 
-    /* Collect all field values and call saveConfiguration() on the server */
+    /* ───────── Save ───────── */
     function save() {
-      const ansRow = document.getElementById('ansKeyRow').value;
+      var ansRow = toEn(document.getElementById('ansKeyRow').value).replace(/\D/g, '');
       if (!ansRow) { alert("অ্যানসার কী রো নম্বর দিন!"); return; }
 
-      const btn = document.getElementById('saveBtn');
+      var isSub = document.getElementById('isSub').value === 'true';
+      var standardRange = '';
+      var subjects = [];
+
+      if (isSub) {
+        var rows = document.querySelectorAll('#subContainer .data-row');
+        var placed = [];
+        for (var i = 0; i < rows.length; i++) {
+          var name = rows[i].querySelector('.s-name').value.trim();
+          if (!name) continue;
+          var p = parseRangeStr(rows[i].querySelector('.s-range').value);
+          if (!p) { alert('"' + name + '" সাবজেক্টের কলাম রেঞ্জ ঠিক নেই। রেঞ্জ লিখুন অথবা প্রথম কলাম ও প্রশ্ন সংখ্যা দিন।'); return; }
+          placed.push({ start: p.start, end: p.end, label: name });
+          subjects.push({ name: name, range: fmtRange(p), pass: num(rows[i].querySelector('.s-pass').value) });
+        }
+        if (!subjects.length) { alert("কমপক্ষে একটা সাবজেক্টের নাম ও রেঞ্জ দিন!"); return; }
+        var ov = findOverlap(placed);
+        if (ov) { alert('কলাম মিলে যাচ্ছে: "' + ov[0].label + '" আর "' + ov[1].label + '" — ঠিক করে আবার সেভ করুন।'); return; }
+      } else {
+        var q = parseRangeStr(document.getElementById('stdRange').value);
+        if (!q) { alert("প্রশ্নের কলাম রেঞ্জ ঠিক নেই! (উদা: G:DB) অথবা প্রথম কলাম ও মোট প্রশ্ন দিন।"); return; }
+        standardRange = fmtRange(q);
+      }
+
+      var btn = document.getElementById('saveBtn');
       btn.innerText = "Processing...";
       btn.disabled  = true;
 
-      const config = {
+      var config = {
         examName:      document.getElementById('examName').value,
-        posMark:       document.getElementById('posMark').value,
-        negMark:       document.getElementById('negMark').value,
-        globalPass:    document.getElementById('globalPass').value,
+        posMark:       num(document.getElementById('posMark').value),
+        negMark:       num(document.getElementById('negMark').value),
+        globalPass:    num(document.getElementById('globalPass').value),
         ansKeyRow:     ansRow,
-        isSubjectWise: document.getElementById('isSub').value === 'true',
-        standardRange: document.getElementById('stdRange').value.toUpperCase(),
-        subjects:      []
+        isSubjectWise: isSub,
+        standardRange: standardRange,
+        subjects:      subjects
       };
 
-      /* Collect subject rows if subject-wise mode is active */
-      if (config.isSubjectWise) {
-        const names  = document.querySelectorAll('.s-name');
-        const ranges = document.querySelectorAll('.s-range');
-        const passes = document.querySelectorAll('.s-pass');
-        names.forEach((n, i) => {
-          if (n.value) {
-            config.subjects.push({
-              name:  n.value,
-              range: ranges[i].value.toUpperCase(),
-              pass:  passes[i].value
-            });
-          }
-        });
-      }
-
-      /* Collect Additional Mark (লিখিত/হোমওয়ার্ক) config, যদি চেক করা থাকে */
-      config.hasAdditionalMark = document.getElementById('hasAddl').checked;
-      config.additionalMode       = "";
-      config.additionalOverall    = null;
-      config.additionalSubjects   = [];
+      /* Additional Mark config, if ticked */
+      config.hasAdditionalMark  = document.getElementById('hasAddl').checked;
+      config.additionalMode     = "";
+      config.additionalOverall  = null;
+      config.additionalSubjects = [];
       if (config.hasAdditionalMark) {
         config.additionalMode = document.getElementById('addlMode').value;
         if (config.additionalMode === 'overall') {
-          // NEW: পাস মার্কও কনফিগে যোগ করা হচ্ছে
           config.additionalOverall = {
             name: document.getElementById('addlName').value || 'Additional',
-            max:  document.getElementById('addlMax').value  || 0,
-            pass: document.getElementById('addlPass').value || 0
+            max:  num(document.getElementById('addlMax').value)  || 0,
+            pass: num(document.getElementById('addlPass').value) || 0
           };
         } else {
-          const rows = document.querySelectorAll('#addlSubContainer .sub-row');
-          rows.forEach((row, i) => {
-            const maxEl  = row.querySelector('.addl-max');
-            const passEl = row.querySelector('.addl-pass');
+          var arows = document.querySelectorAll('#addlSubContainer .sub-row');
+          Array.prototype.forEach.call(arows, function (row, i) {
+            var maxEl  = row.querySelector('.addl-max');
+            var passEl = row.querySelector('.addl-pass');
             config.additionalSubjects.push({
               name: config.subjects[i] ? config.subjects[i].name : '',
-              max:  maxEl  ? (maxEl.value  || 0) : 0,
-              pass: passEl ? (passEl.value || 0) : 0
+              max:  maxEl  ? (num(maxEl.value)  || 0) : 0,
+              pass: passEl ? (num(passEl.value) || 0) : 0
             });
           });
         }
       }
 
-      /* Send config to Apps Script backend and close dialog on success */
       google.script.run
-        .withSuccessHandler(() => { google.script.host.close(); })
-        .withFailureHandler((err) => {
+        .withSuccessHandler(function () { google.script.host.close(); })
+        .withFailureHandler(function (err) {
           alert("Error: " + err.message);
           btn.innerText = "সেভ এবং অটো-র‍্যাঙ্ক";
           btn.disabled  = false;
@@ -264,23 +470,26 @@
         .saveConfiguration(config);
     }
 
-    /* ── আগে সেভ করা কনফিগারেশন লোড করে ফর্ম প্রি-ফিল করা ──
-       এতে ভুল হলে আবার Setup Wizard খুলে এডিট করে রি-রান করা যায়,
-       পুরোটা আবার নতুন করে টাইপ করতে হয় না। */
+    /* ───────── Pre-fill from the saved configuration ───────── */
     function fillForm(saved) {
-      if (!saved || !saved.examName) return; // প্রথমবার রান — কিছু সেভ নেই
+      if (!saved || !saved.examName) return; // first run — nothing saved
       document.getElementById('examName').value   = saved.examName   || '';
       document.getElementById('posMark').value    = saved.posMark    || 1;
       document.getElementById('negMark').value    = saved.negMark    || 0.25;
-      document.getElementById('ansKeyRow').value   = saved.ansKeyRow || '';
-      document.getElementById('globalPass').value = saved.globalPass|| 40;
+      document.getElementById('ansKeyRow').value  = saved.ansKeyRow || '';
+      document.getElementById('globalPass').value = saved.globalPass || 40;
       document.getElementById('stdRange').value   = saved.standardRange || '';
+      onStdInput('range');
       document.getElementById('isSub').value      = saved.isSubjectWise ? 'true' : 'false';
       toggleSub();
 
       if (saved.isSubjectWise && saved.subjects && saved.subjects.length) {
         document.getElementById('subCount').value = String(saved.subjects.length);
         renderSubRows(saved.subjects);
+        // start column = where the first saved subject begins
+        var first = parseRangeStr(saved.subjects[0].range);
+        if (first) document.getElementById('startCol').value = idxToCol(first.start);
+        recalcSubjects();
       }
 
       if (saved.hasAdditionalMark) {
@@ -290,7 +499,6 @@
         if (saved.additionalMode === 'overall' && saved.additionalOverall) {
           document.getElementById('addlName').value = saved.additionalOverall.name || '';
           document.getElementById('addlMax').value  = saved.additionalOverall.max  || '';
-          // NEW: পাস মার্ক প্রি-ফিল
           document.getElementById('addlPass').value = saved.additionalOverall.pass || '';
         }
         renderAddlRows(saved.additionalSubjects || []);
